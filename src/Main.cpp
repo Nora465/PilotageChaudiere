@@ -8,13 +8,13 @@
 
 //------------- DECLARATION-INSTANCES-ET-OBJETS -----------------------------------------------------
 AsyncWebServer	server(80);	// Créé un objet "server" à partir de la lib "WebServer" qui écoute les requêtes sur le port 80
-bool gRelayState = false; 	//a modifier par un fichier du SPIFFS
+//bool gCC1State, gCC2State = false; 	//a modifier par un fichier du SPIFFS
+bool gStates[2] = {true, true}; //Etats des CIRCUITS (pas des relais)
 //---------------------------------------------------------------------------------------------------
 
 void setup() {
 	Serial.begin(115200);
 	Serial.println();
-	delay(1000); // safe-boot
 
 	//Serial.println(ESP.getFreeSketchSpace());
 
@@ -23,24 +23,27 @@ void setup() {
 	pinMode(SW2, INPUT);
 	pinMode(LED_CC1, OUTPUT);
 	pinMode(LED_CC2, OUTPUT);
-	digitalWrite(LED_CC1, LOW);
-	digitalWrite(LED_CC2, LOW);
 	pinMode(RELAY_CC1, OUTPUT);
 	pinMode(RELAY_CC2, OUTPUT);
 
+	digitalWrite(LED_CC1, LOW);
+	digitalWrite(LED_CC2, LOW);
+	digitalWrite(RELAY_CC1, LOW);
+	digitalWrite(RELAY_CC2, LOW);
+
 	//----------------------- Gestion_WiFi ---------------------------------------
 	
-	ConnectToAP();
+	ConnectToAP(); //Connexion en utilisant WiFiManager (portail captif)
 
 	//------------- HANDLE WEB ---------------------------------------------------
 
-	//StartServer();
-	server.on("/relay", [](AsyncWebServerRequest *request) {
-		gRelayState = handleModifyRelayChange(request);
+	//StartServerHandles();
+	server.on("/ForceState", [](AsyncWebServerRequest *request) {
+		handleForceState(request, gStates);
 	});
 
-	server.on("/GetRelayState", [](AsyncWebServerRequest *request) {
-		handleGetRelayState(request, gRelayState);
+	server.on("/GetState", [](AsyncWebServerRequest *request) {
+		handleGetState(request, gStates);
 	});
 
 	server.begin();

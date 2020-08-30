@@ -32,8 +32,8 @@
 	#define RELAY_CC2 D6
 
 //------------- Prototypes de Fonctions ------------------------------------------------------------
-	bool handleModifyRelayChange(AsyncWebServerRequest *request);
-	void handleGetRelayState(AsyncWebServerRequest *request, bool CC1State);
+	void handleForceState(AsyncWebServerRequest *request, bool states[2]);
+	void handleGetState(AsyncWebServerRequest *request, bool states[2]);
 
 	void ConnectToAP();
   

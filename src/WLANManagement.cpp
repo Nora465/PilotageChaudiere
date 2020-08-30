@@ -9,7 +9,6 @@
 #include "MainHeader.h"
 
 void ConnectToAP() {
-	//TODO ne pas commit sur git si le mot de passe est visible (utiliser wifimanager ?)
 
 	WiFiManager wifiManager;
 	//wifiManager.resetSettings(); //reset du réseau sauvegardé (DEBUG&TEST UNIQUEMENT)
@@ -40,25 +39,56 @@ void ConnectToAP() {
 }
 
 // S'éxecute au changement d'état du relai
-bool handleModifyRelayChange(AsyncWebServerRequest *request) {
-	const String GETParamName = "RelayState";
+void handleForceState(AsyncWebServerRequest *request, bool gStates[2]) { //URI : /ForceState?circuit=(1ou2)&state=(0ou1)
 
-	if (!request->hasParam(GETParamName)) {
-		request->send(200, "text/plain", "Erreur : Missing Argument");
-		return 0; //TODO revoir ça (si l'arg manque, on veut renvoyer une erreur, pas 0)
+	//Vérif : Présence des paramètres
+	if (!request->hasParam("circuit") || !request->hasParam("state")) {
+		return request->send(400, "text/plain", "Erreur : Missing Argument(s)");
+	}
+
+	//Vérif : Cohérence de la valeur du Param "state"
+	String stateValue = request->getParam("state")->value();
+	if (stateValue != "1" && stateValue != "0") {
+		return request->send(400, "text/plain", "Erreur : Bad Value For \"State\" Param (0 or 1)");
 	}
 	
-	bool newState = (request->getParam(GETParamName)->value() == "1");
+	//Vérif : Cohérence de la valeur du Param "circuit"
+	uint8_t circuitNumber = request->getParam("circuit")->value().toInt();
+	if (circuitNumber != 1 && circuitNumber != 2) {
+		return request->send(400, "text/plain", "Erreur : Bad Value For \"Circuit\" Param (1 or 2)");
+	}
 
-	digitalWrite(RELAY_CC1, !newState); //inversé car les contacts du relai sont en NF
+	//Ecriture sur la sortie correspondante
+	bool circuitState = (stateValue == "1");
+	//TODO il doit y avoir un moyen plus joli de le faire ?
+	if (circuitNumber == 1) {
+		digitalWrite(RELAY_CC1, !circuitState); //inversé car les contacts du relai sont en NF
+	} else if (circuitNumber == 2) {
+		digitalWrite(RELAY_CC2, !circuitState); //inversé car les contacts du relai sont en NF
+	}
 
-	request->send(200, "text/plain", String(newState));
-	return newState;
+	//Stockage dans le tableau global
+	gStates[circuitNumber - 1] = circuitState;
+	
+	Serial.println("Force state of CC" + String(circuitNumber) + " : " + String(gStates[circuitNumber - 1]));
+	return request->send(200, "text/plain", String(gStates[circuitNumber - 1]));
 }
 
 //S'éxecute pour connaitre l'état du relai
-void handleGetRelayState(AsyncWebServerRequest *request, bool CC1State) {
-	request->send(200, "text/plain", String(CC1State));
-	Serial.print("Ask state: ");
-	Serial.println(CC1State);
+void handleGetState(AsyncWebServerRequest *request, bool states[2]) { //URI : /GetState?circuit=(1ou2)
+
+	//Vérif : Présence Param "circuit"
+	if (!request->hasParam("circuit")) {
+		return request->send(200, "text/plain", "Erreur : Missing Argument \"circuit\"");
+	}
+
+	//Vérif : Cohérence de la valeur du Param "circuit"
+	uint8_t circuitNumber = request->getParam("circuit")->value().toInt();
+	if (circuitNumber != 1 && circuitNumber != 2) {
+		return request->send(400, "text/plain", "Erreur : Bad Value For \"Circuit\" Param (1 or 2)");
+	}
+
+	//Envoi de la valeur du circuit demandé (et print)
+	request->send(200, "text/plain", String(states[circuitNumber - 1]));
+	Serial.println("Ask state of CC" + String(circuitNumber) + " : " + String(states[circuitNumber - 1]));
 }
