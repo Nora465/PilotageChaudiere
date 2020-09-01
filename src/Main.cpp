@@ -19,6 +19,7 @@ void setup() {
 	//Serial.println(ESP.getFreeSketchSpace());
 
 	//----------------------- Gestion_Pins ---------------------------------------
+	pinMode(CAPT_TEMP, INPUT);
 	pinMode(SW1, INPUT);
 	pinMode(SW2, INPUT);
 	pinMode(LED_CC1, OUTPUT);
@@ -50,4 +51,10 @@ void setup() {
 	Serial.println("[WebServer] Server HTTP DEMARRE !\n");
 }
 
-void loop() {}
+void loop() {
+	//Récupération de la température (capteur LM61)
+	float tension = analogRead(A0) * (3.3/1023.0);
+	float temp = (tension - 0.6) * 100.0;
+	Serial.println("Temp : " + String(temp));
+	delay(5000);
+}

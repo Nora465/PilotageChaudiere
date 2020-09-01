@@ -24,6 +24,7 @@
 	#include "DailySchedule.h"		//Gestion de la programmation journalière
 
 //------------ DEFINITIONS DES PINS / VARIABLES ----------------------------------------------------
+	#define CAPT_TEMP A0
 	#define SW1 D3
 	#define SW2 D4
 	#define LED_CC1 D7
