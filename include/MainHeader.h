@@ -19,7 +19,7 @@
 	#include <ESPAsyncWebServer.h>  //WebServer Asynchrone
 
 	//#include <FS.h>                 //SPIFFS
-	//#include <ESP8266WebServer.h>   //lib WebServer Sync
+	//#include <ArduinoJson.h>
 	
 	#include "DailySchedule.h"		//Gestion de la programmation journalière
 

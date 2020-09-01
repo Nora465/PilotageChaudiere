@@ -71,24 +71,14 @@ void handleForceState(AsyncWebServerRequest *request, bool gStates[2]) { //URI :
 	gStates[circuitNumber - 1] = circuitState;
 	
 	Serial.println("Force state of CC" + String(circuitNumber) + " : " + String(gStates[circuitNumber - 1]));
-	return request->send(200, "text/plain", String(gStates[circuitNumber - 1]));
+	return request->send(200, "text/plain", String(gStates[0]) + " " + String(gStates[1]));
 }
 
 //S'éxecute pour connaitre l'état du relai
-void handleGetState(AsyncWebServerRequest *request, bool states[2]) { //URI : /GetState?circuit=(1ou2)
+void handleGetState(AsyncWebServerRequest *request, bool gStates[2]) { //URI : /GetStates
 
-	//Vérif : Présence Param "circuit"
-	if (!request->hasParam("circuit")) {
-		return request->send(200, "text/plain", "Erreur : Missing Argument \"circuit\"");
-	}
-
-	//Vérif : Cohérence de la valeur du Param "circuit"
-	uint8_t circuitNumber = request->getParam("circuit")->value().toInt();
-	if (circuitNumber != 1 && circuitNumber != 2) {
-		return request->send(400, "text/plain", "Erreur : Bad Value For \"Circuit\" Param (1 or 2)");
-	}
-
-	//Envoi de la valeur du circuit demandé (et print)
-	request->send(200, "text/plain", String(states[circuitNumber - 1]));
-	Serial.println("Ask state of CC" + String(circuitNumber) + " : " + String(states[circuitNumber - 1]));
+	//Envoi de la valeur des 2 circuits (et print)
+	String stateValues = String(gStates[0]) + " " + String(gStates[1]);
+	request->send(200, "text/plain", stateValues);
+	Serial.println("Ask states : " + stateValues);
 }

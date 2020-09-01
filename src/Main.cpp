@@ -7,7 +7,7 @@
 #include "MainHeader.h"
 
 //------------- DECLARATION-INSTANCES-ET-OBJETS -----------------------------------------------------
-AsyncWebServer	server(80);	// Créé un objet "server" à partir de la lib "WebServer" qui écoute les requêtes sur le port 80
+AsyncWebServer	server(50500);	// Créé un objet "server" à partir de la lib "WebServer" qui écoute les requêtes sur le port 80
 //bool gCC1State, gCC2State = false; 	//a modifier par un fichier du SPIFFS
 bool gStates[2] = {true, true}; //Etats des CIRCUITS (pas des relais)
 //---------------------------------------------------------------------------------------------------
@@ -42,7 +42,7 @@ void setup() {
 		handleForceState(request, gStates);
 	});
 
-	server.on("/GetState", [](AsyncWebServerRequest *request) {
+	server.on("/GetStates", [](AsyncWebServerRequest *request) {
 		handleGetState(request, gStates);
 	});
 
