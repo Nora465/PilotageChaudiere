@@ -18,28 +18,35 @@
 	#define WEBSERVER_H				//empêche l'erreur de double déf dans <ESPAsyncServer> -- voir https://github.com/me-no-dev/ESPAsyncWebServer/issues/418#issuecomment-667976368
 	#include <ESPAsyncWebServer.h>  //WebServer Asynchrone
 
-	//#include <FS.h>                 //SPIFFS
-	//#include <ArduinoJson.h>
+	#include <LittleFS.h>			//Accès au système de fichier
+	#include <ArduinoJson.h>
 	
 	#include "DailySchedule.h"		//Gestion de la programmation journalière
 
 //------------ DEFINITIONS DES PINS / VARIABLES ----------------------------------------------------
 	#define CAPT_TEMP A0
-	#define SW1 D3
-	#define SW2 D4
-	#define LED_CC1 D7
-	#define LED_CC2 D8
+	#define USB_D_plus D1 //SCL (I2C) (fil blanc)
+	#define USB_D_moins D2 //SDA (I2C) (fil vert)
+	#define BP1_AUTOMANU D3
+	#define BP2_FORCEON_OFF D4
+	#define LED_CC1 D7 //Circuit "Radiateurs"
+	#define LED_CC2 D8 //Circuit "Plancher Chauffant"
 	#define RELAY_CC1 D5
 	#define RELAY_CC2 D6
 
 //------------- Prototypes de Fonctions ------------------------------------------------------------
-	void handleForceState(AsyncWebServerRequest *request, bool states[2]);
-	void handleGetState(AsyncWebServerRequest *request, bool states[2]);
+	void HandleForceState(AsyncWebServerRequest *request, bool states[2]);
+	void HandleGetState(AsyncWebServerRequest *request, bool states[2]);
+	void HandleChangeMode(AsyncWebServerRequest *request, bool gModeAuto);
 
 	void ConnectToAP();
+	void SetPinsMode();
+	bool ToggleCircuitState(uint8_t circuit, uint8_t state);
   
-	//String formatBytes(size_t bytes);
-	//void StartSPIFFS();
+	void StartLittleFS();
+	String formatBytes(size_t bytes);
 
+	Schedule_OneWeek ReadSchedule();
+	void WriteSchedule(Schedule_OneWeek schedule);
 
 #endif

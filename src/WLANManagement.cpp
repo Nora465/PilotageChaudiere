@@ -39,7 +39,7 @@ void ConnectToAP() {
 }
 
 // S'éxecute au changement d'état du relai
-void handleForceState(AsyncWebServerRequest *request, bool gStates[2]) { //URI : /ForceState?circuit=(1ou2)&state=(0ou1)
+void HandleForceState(AsyncWebServerRequest *request, bool gStates[2]) { //URI : /ForceState?circuit=(1ou2)&state=(0ou1)
 
 	//Vérif : Présence des paramètres
 	if (!request->hasParam("circuit") || !request->hasParam("state")) {
@@ -60,12 +60,7 @@ void handleForceState(AsyncWebServerRequest *request, bool gStates[2]) { //URI :
 
 	//Ecriture sur la sortie correspondante
 	bool circuitState = (stateValue == "1");
-	//TODO il doit y avoir un moyen plus joli de le faire ?
-	if (circuitNumber == 1) {
-		digitalWrite(RELAY_CC1, !circuitState); //inversé car les contacts du relai sont en NF
-	} else if (circuitNumber == 2) {
-		digitalWrite(RELAY_CC2, !circuitState); //inversé car les contacts du relai sont en NF
-	}
+	ToggleCircuitState(circuitNumber, circuitState);
 
 	//Stockage dans le tableau global
 	gStates[circuitNumber - 1] = circuitState;
@@ -75,10 +70,36 @@ void handleForceState(AsyncWebServerRequest *request, bool gStates[2]) { //URI :
 }
 
 //S'éxecute pour connaitre l'état du relai
-void handleGetState(AsyncWebServerRequest *request, bool gStates[2]) { //URI : /GetStates
+void HandleGetState(AsyncWebServerRequest *request, bool gStates[2]) { //URI : /GetStates
 
 	//Envoi de la valeur des 2 circuits (et print)
 	String stateValues = String(gStates[0]) + " " + String(gStates[1]);
 	request->send(200, "text/plain", stateValues);
 	Serial.println("Ask states : " + stateValues);
+}
+
+//Mode MANU / AUTO
+void HandleChangeMode(AsyncWebServerRequest *request, bool gModeAuto) { //URI : /ChangeMode?mode=(0 ou 1)
+	//Vérif : Présence du paramètre
+	if (!request->hasParam("mode")) {
+		return request->send(400, "text/plain", "Erreur : Missing Argument \"mode\"");
+	}
+
+	//Vérif : Cohérence de la valeur du Param "mode"
+	String modeValue = request->getParam("mode")->value();
+	if (modeValue != "0" && modeValue != "1") {
+		return request->send(400, "text/plain", "Erreur : Bad Value For \"mode\" Param (0 or 1)");
+	}
+
+	//Vérif : Position AUTO - bouton "Mode" Physique
+	if (!digitalRead(BP1_AUTOMANU)) {
+		Serial.println("Can't change the mode : Physical SW enabled");
+		return request->send(200, "text/plain", "Impossible de changer le mode : Le Mode est forcé physiquement");
+	}
+
+	//Assignation du nouveau mode dans la variable globale
+	gModeAuto = (modeValue == "1");
+	Serial.println("Mode Changé : " + String(gModeAuto));
+	return request->send(200, "text/plain", "Mode Changé : " + String(gModeAuto));
+	
 }
