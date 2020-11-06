@@ -7,6 +7,7 @@
 */
 
 #include "MainHeader.h"
+#include <WiFiManager.h> //permet de la configuration de la connexion WiFi sans mettre les identifiants dans le code
 
 void ConnectToAP() {
 
