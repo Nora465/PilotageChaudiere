@@ -25,6 +25,7 @@
 	#include <TimeAlarms.h>			//
 
 	//Storage-Related Libraries
+	#include <EEPROM.h>				//Access EEPROM (store the schedule)
 	#include <LittleFS.h>			//Access to the File System (SPIFFS is outdated)
 	#include <ArduinoJson.h>		//Json
 
@@ -51,19 +52,23 @@
 	void HandleForceState(AsyncWebServerRequest *request, bool states[2]);
 	void HandleGetState(AsyncWebServerRequest *request, bool states[2]);
 	void HandleChangeMode(AsyncWebServerRequest *request, bool gModeAuto);
+	void HandleModifySchedule(AsyncWebServerRequest *request, ScheduleDay *schedule);
 
 	//IOPinsManagement.cpp
 	void SetPinsMode();
 	bool ToggleCircuitState(uint8_t circuit, bool state);
 	
 	//FSManagement.cpp
-	void 				StartLittleFS();
-	String 				formatBytes(size_t bytes);
-	Schedule_OneWeek 	ReadSchedule();
-	void 				WriteSchedule(Schedule_OneWeek schedule);
+	//String 		formatBytes(size_t bytes);
+	//ScheduleWeek 	ReadSchedule();
+	//void 			WriteSchedule(ScheduleWeek schedule);
+
+	//ScheduleStorage.cpp
+	void LoadEEPROMSchedule(ScheduleDay *schedule, bool displayValues = false);
+	void WriteScheduleToEEPROM(ScheduleDay *schedule);
 
 	//TimeManagement.cpp
 	void StartNTPClient(NTPClient &timeClient);
-	void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate= false);
+	void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate = false);
 
 #endif

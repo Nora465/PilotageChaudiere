@@ -5,9 +5,7 @@
  * Date de création : 24/08/2020
  * Créateur : Nora465
 */
-
 #include "MainHeader.h"
-#include <WiFiManager.h> //permet de la configuration de la connexion WiFi sans mettre les identifiants dans le code
 
 void ConnectToAP() {
 
@@ -103,4 +101,14 @@ void HandleChangeMode(AsyncWebServerRequest *request, bool gModeAuto) { //URI : 
 	Serial.println("Mode Changé : " + String(gModeAuto));
 	return request->send(200, "text/plain", "Mode Changé : " + String(gModeAuto));
 	
+}
+
+void HandleModifySchedule(AsyncWebServerRequest *request, ScheduleDay *schedule) {
+
+	//TODO Schedule : créer la liaison entre ESP et smartphone
+
+	//get the new struct, put it in "schedule"
+
+	WriteScheduleToEEPROM(schedule);
+	//fonction : maj des alarmes ?
 }
