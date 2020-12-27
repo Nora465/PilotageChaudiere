@@ -46,14 +46,17 @@
 	#define TIME_OFFSET_S 3600 //France : UTC+1 (3600 seconds)
 	#define TIME_UPDATE_INTERVAL 1 * 24 * 60 * 60 * 1000 //1 Day
 
+	#define SHOW_DEBUG true //Show all the Serial.println() in the console (Useless when in production)
+
 //------------- Functions Prototypes ----------------------------------------------------------------------
 	//WLANManagement.cpp
 	void ConnectToAP();
 	void HandleForceState(AsyncWebServerRequest *request, bool states[2]);
 	void HandleGetState(AsyncWebServerRequest *request, bool states[2]);
-	void HandleChangeMode(AsyncWebServerRequest *request, bool gModeAuto);
-	void HandleModifySchedule(AsyncWebServerRequest *request, ScheduleDay *schedule);
-
+	void HandleChangeMode(AsyncWebServerRequest *request, bool *gModeAuto);
+	void HandleGetSchedule(AsyncWebServerRequest *request, ScheduleDay *schedule, bool useFullWeek[2]);
+	void HandleModifySchedule(AsyncWebServerRequest *request, ScheduleDay *schedule, bool useFullWeek[2]);
+	void writeFirstThing();
 	//IOPinsManagement.cpp
 	void SetPinsMode();
 	bool ToggleCircuitState(uint8_t circuit, bool state);
@@ -64,8 +67,8 @@
 	//void 			WriteSchedule(ScheduleWeek schedule);
 
 	//ScheduleStorage.cpp
-	void LoadEEPROMSchedule(ScheduleDay *schedule, bool displayValues = false);
-	void WriteScheduleToEEPROM(ScheduleDay *schedule);
+	void LoadEEPROMSchedule(ScheduleDay *schedule, bool useFullWeek[2], bool displayValues= false);
+	void WriteScheduleToEEPROM(ScheduleDay *schedule, bool useFullWeek[2]);
 
 	//TimeManagement.cpp
 	void StartNTPClient(NTPClient &timeClient);

@@ -1,6 +1,5 @@
 /* 
- * Handle the writing of the schedule in the EEPROM
- * And the Reading of it
+ * Handle the reading/writing of the schedule in the EEPROM
  * 
  * Creation Date : 06/09/2020 - 22h09
  * Creator : Nora465
@@ -9,39 +8,46 @@
 #include "MainHeader.h"		//Global Header File
 
 /**
- * Start EEPROM, and load the daily-schedule stored inside
- * @param displayValues <bool> If you want to display the Schedule struct
- * @param schedule <ScheduleDay[7]> The array of struct where to write the EEPROM schedule
+ * Write the schedule structure inside the EEPROM
+ * @param schedule ScheduleDay[7] - The array of struct that store the schedule
+ * @param useFullWeek bool[2] - Define how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
+ * @param displayValues bool - If true, display the stored schedule
  */
-void LoadEEPROMSchedule(ScheduleDay *schedule, bool displayValues) {
+void LoadEEPROMSchedule(ScheduleDay *schedule, bool useFullWeek[2], bool displayValues) {
 
-	EEPROM.begin(30);
-	Serial.println("[EEPROM] Started ! Length : " + String(EEPROM.length()));
+	EEPROM.begin(EEPROM_LENGTH);
+	if (SHOW_DEBUG) Serial.println("[EEPROM] Started ! Length : " + String(EEPROM.length()));
 	
-	//check the magic number at @0 (this number  if the data has been writed at least one time by this program)
-	uint16_t eepromMagicNumber = (EEPROM.read(0) << 8) + EEPROM.read(1);
+	//check the magic number at @0 (verify if the data has been writed at least one time by this program)
+	uint16_t readMagicNumber = (EEPROM.read(0) << 8) + EEPROM.read(1);
 	
-	bool dataError = (eepromMagicNumber != EEPROM_MAGICNUMBER);
-	if (dataError) { //TODO change mode to manual (and wait for smartphone)
+	bool dataError = (readMagicNumber != EEPROM_MAGICNUMBER);
+	if (dataError) { 
+		//TODO change mode to manual (and wait for smartphone)
 		//DISABLE THE AUTOMATIC MODE (and wait for a schedule update from the smartphone)
 		//..
 		schedule = {}; //initialize to zero
-		Serial.println("[EEPROM] Erreur fichier config non initialisé");
+		if (SHOW_DEBUG) Serial.println("[EEPROM] Erreur : données EEPROM non initialisé \nattente d'un input smartphone");
 
-		return; //est ce qu'on est obligé de retourner un "false" pour informer le main qu'on a un pb de données ?
-	} else Serial.println("[EEPROM] Data are valids ! ");
+		return; //TODO est ce qu'on est obligé de retourner un "false" pour informer le main qu'on a un pb de données ? => oui
+	} else if (SHOW_DEBUG) Serial.println("[EEPROM] Data are valids ! ");
 
-	//Get the struct (offset : 2 because @0&1 are the magic number)
+	//we use FullWeek OR Week+WeekEnd ?
+	useFullWeek[0] = (EEPROM.read(2) & 0b00000010) >> 1; // 0000 00XY => useFullWeek[0] = X  ... [1] = Y
+	useFullWeek[1] = (EEPROM.read(2) & 0b00000001);
+
+	//Get the struct (offset :3 because @0&1 are the magic number, and @2 is the type of schedule)
 	for (uint8_t i=0; i < 7; i++) {
-		EEPROM.get((sizeof(ScheduleDay) * i)+2, schedule[i]);
+		EEPROM.get((sizeof(ScheduleDay) * i)+3, schedule[i]);
 	}
+
 	//affichage du contenu de l'eeprom
-	/*for (uint8_t i = 0; i < EEPROM_LENGTH; i++) {
+	/*for (uint8_t i = 0; i < EEPROM.length(); i++) {
 		Serial.println(String(i) + " " + String(EEPROM.read(i)));
 	}*/
 
 	//Affichage des valeurs (takes ~30ms)
-	if (displayValues) {
+	if (displayValues && SHOW_DEBUG) {
 		Serial.print("[EEPROM] Struct Readed : \n");
 		
 		for (uint8_t i= 0; i < 7; i++) {
@@ -52,37 +58,43 @@ void LoadEEPROMSchedule(ScheduleDay *schedule, bool displayValues) {
 	EEPROM.end();
 }
 
+/**
+ * Write dummy values in the EEPROM, for testing
+ * The return instruction at the begining prevent from writing multiple time
+ */
 void writeFirstThing() {
-	return; //evitons d'écrire de facon inutile
-	const uint16_t magicNumber = 29127; //Random
+	return; //Don't always write
 
-	EEPROM.begin(30);
-	
-	EEPROM.write(0, magicNumber >> 8);
-	EEPROM.write(1, magicNumber & 0x00FF);
+	EEPROM.begin(EEPROM_LENGTH);	
+	EEPROM.write(0, EEPROM_MAGICNUMBER >> 8);
+	EEPROM.write(1, EEPROM_MAGICNUMBER & 0x00FF);
+	EEPROM.write(2, 0x03); //write full week for both range (Monday To Sunday)
 
-	for (int i= 2; i < 30; i++) {
-		EEPROM.write(i, i-1);
-		//Serial.println(String(i) + " " + String((i-1)));
+	uint8_t cptrHours = 0;
+	for (int i= 3; i < EEPROM_LENGTH+1; i++) {
+		EEPROM.write(i, cptrHours);
+		cptrHours++;
+		if (cptrHours > 23) cptrHours = 0;
 	}
-	
 	EEPROM.end();
 }
 
 /**
  * Write the new Schedule inside the EEPROM memory
- * @param schedule <ScheduleDay[7]> The array of struct where to write the EEPROM schedule
+ * @param schedule ScheduleDay[7] - The array of struct where to write the EEPROM schedule
+ * @param showFullWeek bool[2] - Define how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  */
-void WriteScheduleToEEPROM(ScheduleDay *schedule) {
-	return;
+void WriteScheduleToEEPROM(ScheduleDay *schedule, bool showFullWeek[2]) {
 
-	EEPROM.begin(30);
+	EEPROM.begin(EEPROM_LENGTH);
 	
 	EEPROM.write(0, EEPROM_MAGICNUMBER >> 8);
 	EEPROM.write(1, EEPROM_MAGICNUMBER & 0xFF);
+	EEPROM.write(2, (showFullWeek[0] << 1) + showFullWeek[1]); // 0000 00XY : useFullWeek[0]= X .. [1] = Y
 
 	for (uint8_t i=0; i < 7; i++) {
-		EEPROM.put((sizeof(ScheduleDay) * i)+2, schedule[i]);
-	}	
+		EEPROM.put((sizeof(ScheduleDay) * i)+3, schedule[i]);
+	}
 	EEPROM.end();
+	if (SHOW_DEBUG) Serial.println("EEPROM has been writed !");
 }
