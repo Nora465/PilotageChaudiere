@@ -35,14 +35,17 @@ void SetPinsMode() {
  * @return <bool> True if success - False if fail
 */
 bool ToggleCircuitState(uint8_t circuit, bool state) {
+	//TODO ajouter un argument à la fonction : reason (et archiver la raison du changement (Forcing, AUTO ...))
 	if (circuit == 1) {
-		//If Mode Manu is enable, ignore the change
-		if (!digitalRead(BP1_AUTOMANU)) return false;
+		if (!digitalRead(BP1_AUTOMANU)) return false; //If Mode Manu is enable, ignore the change
+		if (digitalRead(RELAY_CC1) == !state) return false; //don't change if the new state = old state
 		
-		digitalWrite(RELAY_CC1, !state); //inverted, because the relay contacts is NC
+		digitalWrite(RELAY_CC1, !state); //inverted, because the relay contact is NC
 		//digitalWrite(LED_CC1, state);
 	} else if (circuit == 2) {
-		digitalWrite(RELAY_CC2, !state); //inverted, because the relay contacts is NC
+		if (digitalRead(RELAY_CC2) == !state) return false; //don't change if the new state = old state
+
+		digitalWrite(RELAY_CC2, !state); //inverted, because the relay contact is NC
 		//digitalWrite(LED_CC2, state);
 	} else return false;
 	return true;

@@ -14,8 +14,12 @@
 void StartNTPClient(NTPClient &timeClient) {
 	timeClient.begin();
 	TryToUpdateTime(timeClient, true); //2nd argument will force the update
-
-	Serial.println("[NTP Client] Client NTP Démarré (il est " + String(timeClient.getFormattedTime()) + ")");
+	if (timeStatus() == timeSet) {
+		Serial.println("[NTP Client] Client NTP Démarré (il est " + String(timeClient.getFormattedTime()) + ")");
+	} else {
+		Serial.println("[NTP Client] Erreur, impossible de mettre à jour l'heure \nRedemarrage...");
+		ESP.restart();
+	}
 }
 
 /**
