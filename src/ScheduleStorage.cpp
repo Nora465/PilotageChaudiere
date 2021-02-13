@@ -6,6 +6,7 @@
 */
 
 #include "MainHeader.h"		//Global Header File
+extern bool gShowFullWeek[2];
 
 /**
  * Write the schedule structure inside the EEPROM
@@ -13,7 +14,7 @@
  * @param useFullWeek bool[2] - Define how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  * @param displayValues bool - If true, display the stored schedule
  */
-void LoadEEPROMSchedule(ScheduleDay *schedule, bool useFullWeek[2], bool displayValues) {
+void LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues) {
 
 	EEPROM.begin(EEPROM_LENGTH);
 	if (SHOW_DEBUG) Serial.println("[EEPROM] Started ! Length : " + String(EEPROM.length()));
@@ -26,15 +27,15 @@ void LoadEEPROMSchedule(ScheduleDay *schedule, bool useFullWeek[2], bool display
 		//TODO change mode to manual (and wait for smartphone)
 		//DISABLE THE AUTOMATIC MODE (and wait for a schedule update from the smartphone)
 		//..
-		schedule = {}; //initialize to zero
+		//gSchedule = {}; //TODO (?) initialize to zero (don't need, it's the default state)
 		if (SHOW_DEBUG) Serial.println("[EEPROM] Erreur : données EEPROM non initialisé \nattente d'un input smartphone");
 
 		return; //TODO est ce qu'on est obligé de retourner un "false" pour informer le main qu'on a un pb de données ? => oui
 	} else if (SHOW_DEBUG) Serial.println("[EEPROM] Data are valids ! ");
 
 	//we use FullWeek OR Week+WeekEnd ?
-	useFullWeek[0] = (EEPROM.read(2) & 0b00000010) >> 1; // 0000 00XY => useFullWeek[0] = X  ... [1] = Y
-	useFullWeek[1] = (EEPROM.read(2) & 0b00000001);
+	gShowFullWeek[0] = (EEPROM.read(2) & 0b00000010) >> 1; // 0000 00XY => useFullWeek[0] = X  ... [1] = Y
+	gShowFullWeek[1] = (EEPROM.read(2) & 0b00000001);
 
 	//Get the struct (offset :3 because @0&1 are the magic number, and @2 is the type of schedule)
 	for (uint8_t i=0; i < 7; i++) {
@@ -84,13 +85,13 @@ void writeFirstThing() {
  * @param schedule ScheduleDay[7] - The array of struct where to write the EEPROM schedule
  * @param showFullWeek bool[2] - Define how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  */
-void WriteScheduleToEEPROM(ScheduleDay *schedule, bool showFullWeek[2]) {
+void WriteScheduleToEEPROM(ScheduleDay schedule[6]) {
 
 	EEPROM.begin(EEPROM_LENGTH);
 	
 	EEPROM.write(0, EEPROM_MAGICNUMBER >> 8);
 	EEPROM.write(1, EEPROM_MAGICNUMBER & 0xFF);
-	EEPROM.write(2, (showFullWeek[0] << 1) + showFullWeek[1]); // 0000 00XY : useFullWeek[0]= X .. [1] = Y
+	EEPROM.write(2, (gShowFullWeek[0] << 1) + gShowFullWeek[1]); // 0000 00XY : useFullWeek[0]= X .. [1] = Y
 
 	for (uint8_t i=0; i < 7; i++) {
 		EEPROM.put((sizeof(ScheduleDay) * i)+3, schedule[i]);

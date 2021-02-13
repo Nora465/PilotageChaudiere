@@ -5,6 +5,7 @@
 */
 
 #include "MainHeader.h"
+extern bool gStates[2];
 
 /** Set the pinMode for all pins & Set the stored value
  *  Execute ONCE at the start of program 
@@ -22,8 +23,8 @@ void SetPinsMode() {
 	
 	digitalWrite(USB_D_PLUS, LOW);
 	digitalWrite(USB_D_MINUS, LOW);
-	digitalWrite(LED_CC1, LOW); //TODO stocker les états des relais, et activer les relay/leds en fonction (au démarrage)
-	digitalWrite(LED_CC2, LOW);
+	digitalWrite(LED_CC1, HIGH); //TODO stocker les états des relais, et activer les relay/leds en fonction (au démarrage)
+	digitalWrite(LED_CC2, HIGH);
 	digitalWrite(RELAY_CC1, LOW);
 	digitalWrite(RELAY_CC2, LOW);
 }
@@ -36,17 +37,25 @@ void SetPinsMode() {
 */
 bool ToggleCircuitState(uint8_t circuit, bool state) {
 	//TODO ajouter un argument à la fonction : reason (et archiver la raison du changement (Forcing, AUTO ...))
+	//pas obligé de rajouter un argument, on peut call FS.Archive("IO", <reasonOfChange>)
+	//TODO au lieu de return un <bool> (on connait pas l'erreur), on peut return "" si OK, ou "<raison de l'erreur>" 
+	//si erreur (en sortie de la fonction, on fera un if (ToggleCircuitState(1,0) == ""))
+
 	if (circuit == 1) {
-		if (!digitalRead(BP1_AUTOMANU)) return false; //If Mode Manu is enable, ignore the change
+		if (!digitalRead(BP1_AUTOMANU)) return false; //If (Physical) Manual Mode is enable, ignore the change
 		if (digitalRead(RELAY_CC1) == !state) return false; //don't change if the new state = old state
-		
+
 		digitalWrite(RELAY_CC1, !state); //inverted, because the relay contact is NC
-		//digitalWrite(LED_CC1, state);
+		digitalWrite(LED_CC1, state);
 	} else if (circuit == 2) {
 		if (digitalRead(RELAY_CC2) == !state) return false; //don't change if the new state = old state
-
+		
 		digitalWrite(RELAY_CC2, !state); //inverted, because the relay contact is NC
-		//digitalWrite(LED_CC2, state);
+		digitalWrite(LED_CC2, state);
 	} else return false;
+
+	gStates[circuit - 1] = state;
+	if (SHOW_DEBUG) Serial.println("[IO-chgt] OK - Changed state of circuit " + String(circuit) + ": " + (gStates[circuit] ? "activé" : "désactivé"));
+	appendStrToFile("[IO-chgt] OK - Modification de l'état du circuit n°" + String(circuit) + " => " + (gStates[circuit] ? "ACTIF(1)" : "DESACTIVE(0)"));
 	return true;
 }
