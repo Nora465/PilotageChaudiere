@@ -8,79 +8,113 @@
 
 //------------- GLOBAL-DECLARATIONS --------------------------------------------------------------
 AsyncWebServer	server(50500);	// Instantiate an AsyncWebServer (listen to requests on port 50500)
-WiFiUDP ntpUDP; //The UDP instance for NTPClient
-NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", TIME_OFFSET_S, TIME_UPDATE_INTERVAL);
+WiFiUDP 		ntpUDP; //The UDP instance for NTPClient
+NTPClient 		timeClient(ntpUDP, "europe.pool.ntp.org", TIME_OFFSET_S, TIME_UPDATE_INTERVAL);
 
+//TODO passer la structure en un tableau 2D gSchedule[6(jour)][4(P1Start, P2...)]
 ScheduleDay gSchedule[6];
-bool gShowFullWeek[2]; //how we show the schedule on phone (the 7 days of the week, or the work week and the weekend)
-uint8_t gCurrentDay; //Current day of the week (1: Monday ... 7: Sunday)
+bool gShowFullWeek[2] = {true, true}; //how we show the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
 
-//bool gCC1State, gCC2State = false; 	//a modifier par un fichier du SPIFFS
-bool gStates[2] = {true, true}; //CIRCUITS states (NOT RELAYS)
+bool gStates[2] = {true, true}; //circuits states (NOT RELAYS) CC1: Boiler || CC2: Heaters
 bool gModeAuto = true; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified by androidApp or physically)
+uint8_t gCurRange= 1; //Current Range (Range2 - Heaters)
+AlarmID_t gMyAlarmID;
+bool gNextState= false; //Next state of the circuit 1 (defined by the schedule)
+float gOutTemp = 0.0; //Outdoor temperature
 //---------------------------------------------------------------------------------------------------
 
 void setup() {
 	Serial.begin(115200);
 	Serial.println();
 
-	//----------------------- Gestion_Pins ---------------------------------------
+//---------------------------- Gestion_Pins ---------------------------------------
 	SetPinsMode(); //Pins Allocation Management (IN/OUT, output states by default)
 
-	//------------------ ----- Gestion_WiFi ---------------------------------------
+//---------------------------- Gestion_WiFi ---------------------------------------
 	ConnectToAP(); //Connect to WiFi AP with WiFiManager (captive portal)
 
-	//------------- HANDLE WEB ---------------------------------------------------
+	startLittleFS();
+	appendStrToFile("[ESP] REBOOT : UNKNOWN CAUSE");
+
+//------------------ HANDLE WEB ---------------------------------------------------
+//----------- States of Relays
+	server.on("/GetStates", [](AsyncWebServerRequest *request) {
+		HandleGetState(request);
+	});
 
 	server.on("/ForceState", [](AsyncWebServerRequest *request) {
-		HandleForceState(request, gStates);
+		HandleForceState(request);
+	});
+//----------- Mode AUTO/MANU
+	server.on("/GetMode", [](AsyncWebServerRequest *request) {
+		HandleGetMode(request);
 	});
 
-	server.on("/GetStates", [](AsyncWebServerRequest *request) {
-		HandleGetState(request, gStates);
+	server.on("/SetMode", [](AsyncWebServerRequest *request) {
+		HandleSetMode(request);
+	});
+//----------- Range (1 is Work // 2 is holiday)
+	server.on("/GetRange", [] (AsyncWebServerRequest *request) {
+		HandleGetRange(request);
 	});
 
-	server.on("/ChangeMode", [](AsyncWebServerRequest *request) {
-		HandleChangeMode(request, &gModeAuto);
+	server.on("/SetRange", [] (AsyncWebServerRequest *request) {
+		HandleSetRange(request);
 	});
 
-	//---- HTTP HANDLES : SCHEDULE ---------------
+//--------- Schedule
 	server.on("/GetSchedule", [](AsyncWebServerRequest *request) {
-		HandleGetSchedule(request, gSchedule, gShowFullWeek);
+		HandleGetSchedule(request, gShowFullWeek);
 	});
 
 	//TODO problem : https://github.com/me-no-dev/ESPAsyncWebServer/issues/902 and Issue#904 !
-	//HTTP_POST = 2 for MeNoDev (but is 3 for the basic lib ?)
+	//HTTP_POST = 2 for MeNoDev (but it's 3 for the esp8266 lib ?)
 	server.on("/ModifySchedule", 2, [](AsyncWebServerRequest *request) {
-		HandleModifySchedule(request, gSchedule, gShowFullWeek);
-		//TODO function : alarms update ?
+		HandleModifySchedule(request, gShowFullWeek);
+	});
+
+	//TODO Test Code - à supprimer quand les tests sont reussis
+	server.on("/UpdateHour", [](AsyncWebServerRequest *request) {
+		HandledabSchedule(request);
+	});
+
+	server.on("/deleteLog", [](AsyncWebServerRequest *request) {
+		bool success = DeleteLogFile();
+		request->send((success)?200:404, "text/plain", (success)?"Fichier log.txt effacé !":"erreur pendant la suppresion du fichier log.txt");
+	});
+
+	server.onNotFound([](AsyncWebServerRequest *request){
+		if (request->url() == "/log") {
+			return request->send(LittleFS, "/log.txt", "text/plain");
+		}
+		Serial.println(request->url() + " => Aucun path pour ce fichier web");
+		request->send(404, "text/plain", "désolé, aucun fichier ne correspond à cette uri :'(");
 	});
 
 	server.begin();
 	if (SHOW_DEBUG) Serial.println("[WebServer] Server HTTP DEMARRE !\n");
 //---------------------------------------------------------------------------------------------------
 
-	//StartNTPClient(timeClient); //start the NTPClient and force update the Time (and NTPTime)
-	
-	//Read Schedule from EEPROM
-	LoadEEPROMSchedule(gSchedule, gShowFullWeek, true);
+	StartNTPClient(timeClient); //start the NTPClient and force update the Time (and NTPTime)
 
-	//Alarm FOR TESTING
-	Alarm.timerRepeat(15, [](){
-		if (SHOW_DEBUG) Serial.println("TICK 15 secondes");
-	});
+	//Read Schedule from EEPROM
+	LoadEEPROMSchedule(gSchedule, true);
+
+	gMyAlarmID = CreateNewAlarm(); //Create an alarm to change the state of circuit (when schedule say so)
+	appendStrToFile("==========================");
 }
 
 void loop() {
-	//Time
-	TryToUpdateTime(timeClient); //Update the Time if "update Interval"(NTPClient) has been reached
+	//Update the Time if the "update Interval" (inside NTPClient) has been reached (every day)
+	TryToUpdateTime(timeClient);
 	
-	//Gestion ALARMES
-	Alarm.delay(1000);
+	//In AUTO Mode, check if an alarm has reached the threshold, and execute the Handle
+	if (gModeAuto) Alarm.delay(1000);
 
 	//display of time (NTP)
-	if (SHOW_DEBUG) Serial.println(timeClient.getFormattedTime()); //the NTPTime
-
+	//if (SHOW_DEBUG) Serial.println(timeClient.getFormattedTime()); //the NTPTime
+	//Serial.println(String(hour()) + ":"+String(minute()) + ":" + String(second()));
+	
 	/* //display of temperature
 	//Temperature acquisition (LM61 sensor)
 	float voltage = analogRead(A0) * (3.3/1023.0);

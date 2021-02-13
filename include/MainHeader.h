@@ -43,19 +43,22 @@
 	#define RELAY_CC1 D5
 	#define RELAY_CC2 D6
 
-	#define TIME_OFFSET_S 3600 //France : UTC+1 (3600 seconds)
+	#define TIME_OFFSET_S 3600 //France : UTC+1 (3600 seconds = 1H)
 	#define TIME_UPDATE_INTERVAL 1 * 24 * 60 * 60 * 1000 //1 Day
 
-	#define SHOW_DEBUG true //Show all the Serial.println() in the console (Useless when in production)
+	#define SHOW_DEBUG true //Show the Serial.println() in the console (Useless when in production)
 
 //------------- Functions Prototypes ----------------------------------------------------------------------
 	//WLANManagement.cpp
 	void ConnectToAP();
-	void HandleForceState(AsyncWebServerRequest *request, bool states[2]);
-	void HandleGetState(AsyncWebServerRequest *request, bool states[2]);
-	void HandleChangeMode(AsyncWebServerRequest *request, bool *gModeAuto);
-	void HandleGetSchedule(AsyncWebServerRequest *request, ScheduleDay *schedule, bool useFullWeek[2]);
-	void HandleModifySchedule(AsyncWebServerRequest *request, ScheduleDay *schedule, bool useFullWeek[2]);
+	void HandleGetState(AsyncWebServerRequest *request);
+	void HandleForceState(AsyncWebServerRequest *request);
+	void HandleGetMode(AsyncWebServerRequest *request);
+	void HandleSetMode(AsyncWebServerRequest *request);
+	void HandleGetRange(AsyncWebServerRequest *request);
+	void HandleSetRange(AsyncWebServerRequest *request);
+	void HandleGetSchedule(AsyncWebServerRequest *request, bool useFullWeek[2]);
+	void HandleModifySchedule(AsyncWebServerRequest *request, bool useFullWeek[2]);
 	void writeFirstThing();
 	//IOPinsManagement.cpp
 	void SetPinsMode();
@@ -67,11 +70,20 @@
 	//void 			WriteSchedule(ScheduleWeek schedule);
 
 	//ScheduleStorage.cpp
-	void LoadEEPROMSchedule(ScheduleDay *schedule, bool useFullWeek[2], bool displayValues= false);
-	void WriteScheduleToEEPROM(ScheduleDay *schedule, bool useFullWeek[2]);
+	void LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues= false);
+	void WriteScheduleToEEPROM(ScheduleDay schedule[6]);
 
 	//TimeManagement.cpp
 	void StartNTPClient(NTPClient &timeClient);
-	void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate = false);
+	void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate= false);
+	uint8_t GetNonRetardDay();
+	AlarmID_t CreateNewAlarm();
+	void TimeHandle();
+
+	//TEMP/TEST Handle/functions
+	void HandledabSchedule(AsyncWebServerRequest *request);
+	void startLittleFS();
+	void appendStrToFile(String str);
+	bool DeleteLogFile();
 
 #endif
