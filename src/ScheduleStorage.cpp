@@ -13,8 +13,9 @@ extern bool gShowFullWeek[2];
  * @param schedule ScheduleDay[7] - The array of struct that store the schedule
  * @param useFullWeek bool[2] - Define how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  * @param displayValues bool - If true, display the stored schedule
+ * @return bool - if true, there is no error while loading schedule from EEPROM
  */
-void LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues) {
+bool LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues) {
 
 	EEPROM.begin(EEPROM_LENGTH);
 	if (SHOW_DEBUG) Serial.println("[EEPROM] Started ! Length : " + String(EEPROM.length()));
@@ -23,23 +24,18 @@ void LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues) {
 	uint16_t readMagicNumber = (EEPROM.read(0) << 8) + EEPROM.read(1);
 	
 	bool dataError = (readMagicNumber != EEPROM_MAGICNUMBER);
-	if (dataError) { 
-		//TODO change mode to manual (and wait for smartphone)
-		//DISABLE THE AUTOMATIC MODE (and wait for a schedule update from the smartphone)
-		//..
-		//gSchedule = {}; //TODO (?) initialize to zero (don't need, it's the default state)
-		if (SHOW_DEBUG) Serial.println("[EEPROM] Erreur : données EEPROM non initialisé \nattente d'un input smartphone");
-
-		return; //TODO est ce qu'on est obligé de retourner un "false" pour informer le main qu'on a un pb de données ? => oui
+	if (dataError) {
+		if (SHOW_DEBUG) Serial.println("[EEPROM] Erreur : données EEPROM non initialisé \nProgrammez la chaudière !");
+		return false; //error
 	} else if (SHOW_DEBUG) Serial.println("[EEPROM] Data are valids ! ");
 
-	//we use FullWeek OR Week+WeekEnd ?
+	//how to display the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
 	gShowFullWeek[0] = (EEPROM.read(2) & 0b00000010) >> 1; // 0000 00XY => useFullWeek[0] = X  ... [1] = Y
 	gShowFullWeek[1] = (EEPROM.read(2) & 0b00000001);
 
-	//Get the struct (offset :3 because @0&1 are the magic number, and @2 is the type of schedule)
+	//Get the schedule (offset :3 because @0&1 are the magic number, and @2 is the type of schedule)
 	for (uint8_t i=0; i < 7; i++) {
-		EEPROM.get((sizeof(ScheduleDay) * i)+3, schedule[i]);
+		EEPROM.get((sizeof(ScheduleDay) *i) +3, schedule[i]);
 	}
 
 	//affichage du contenu de l'eeprom
@@ -57,6 +53,7 @@ void LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues) {
 		}
 	}
 	EEPROM.end();
+	return true; //no error
 }
 
 /**

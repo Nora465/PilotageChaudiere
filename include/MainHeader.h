@@ -70,7 +70,7 @@
 	//void 			WriteSchedule(ScheduleWeek schedule);
 
 	//ScheduleStorage.cpp
-	void LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues= false);
+	bool LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues= false);
 	void WriteScheduleToEEPROM(ScheduleDay schedule[6]);
 
 	//TimeManagement.cpp

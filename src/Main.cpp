@@ -11,9 +11,9 @@ AsyncWebServer	server(50500);	// Instantiate an AsyncWebServer (listen to reques
 WiFiUDP 		ntpUDP; //The UDP instance for NTPClient
 NTPClient 		timeClient(ntpUDP, "europe.pool.ntp.org", TIME_OFFSET_S, TIME_UPDATE_INTERVAL);
 
-//TODO passer la structure en un tableau 2D gSchedule[6(jour)][4(P1Start, P2...)]
-ScheduleDay gSchedule[6];
-bool gShowFullWeek[2] = {true, true}; //how we show the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
+//TODO passer la structure en un tableau 2D gSchedule[7(jours)][4(P1Start, P2...)]
+ScheduleDay gSchedule[7] = {0,0,0,0,0,0,0};
+bool gShowFullWeek[2] = {true, true}; //how to display the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
 
 bool gStates[2] = {true, true}; //circuits states (NOT RELAYS) CC1: Boiler || CC2: Heaters
 bool gModeAuto = true; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified by androidApp or physically)
@@ -34,9 +34,16 @@ void setup() {
 	ConnectToAP(); //Connect to WiFi AP with WiFiManager (captive portal)
 
 	startLittleFS();
-	appendStrToFile("[ESP] REBOOT : UNKNOWN CAUSE");
-
+	String debug = "===\nREBOOT\n-PtrReason: " + String(ESP.getResetInfoPtr()->reason);
+	debug += "\n-exccause: " + String(ESP.getResetInfoPtr()->exccause);
+	debug += "\n-excvaddr: " + String(ESP.getResetInfoPtr()->excvaddr);
+	debug += "\n-epc1: " + String(ESP.getResetInfoPtr()->epc1);
+	debug += "\n-epc2: " + String(ESP.getResetInfoPtr()->epc2);
+	debug += "\n-epc3: " + String(ESP.getResetInfoPtr()->epc3) + "\n===";
+	appendStrToFile(debug);
+	Serial.println(debug);
 //------------------ HANDLE WEB ---------------------------------------------------
+//TODO ajouter une handle "/" pour inviter à télécharger la dernière version de l'appli android
 //----------- States of Relays
 	server.on("/GetStates", [](AsyncWebServerRequest *request) {
 		HandleGetState(request);
@@ -98,9 +105,16 @@ void setup() {
 	StartNTPClient(timeClient); //start the NTPClient and force update the Time (and NTPTime)
 
 	//Read Schedule from EEPROM
-	LoadEEPROMSchedule(gSchedule, true);
+	bool success = LoadEEPROMSchedule(gSchedule, true);
+	if (success) gMyAlarmID = CreateNewAlarm(); //Create an alarm to change the state of circuit (when schedule say so)
+	else {
+		//if error while loading the schedule from EEPROM, enable Manual mode, and activate both circuits
+		gModeAuto = false;
+		ToggleCircuitState(1, true);
+		ToggleCircuitState(2, true);
+	}
 
-	gMyAlarmID = CreateNewAlarm(); //Create an alarm to change the state of circuit (when schedule say so)
+	
 	appendStrToFile("==========================");
 }
 
