@@ -92,11 +92,12 @@ void HandleForceState(AsyncWebServerRequest *request) { //URI : /ForceState?circ
 
 	if (!success) {
 		if (SHOW_DEBUG) Serial.println("[Web-ForcStat] Err : Couldn't change the state (already in this state ? physical button ?)");
-		return request->send(400, "text/plain", "Erreur : le bouton \"mode\" est peut etre activé, ou le relai est déjà dans cette position");
+		request->send(400, "text/plain", "Erreur : le bouton \"mode\" est peut etre activé, ou le relai est déjà dans cette position");
 	} else {
 		//send states to WebClient
 		if (SHOW_DEBUG) Serial.println("[Web-ForcStat] OK : New State for CC" + String(circuitNumber) + " : " + ((gStates[circuitNumber - 1]) ? "Enabled" : "Disabled"));
-		return request->send(200, "text/plain", String(gStates[0]) + " " + String(gStates[1]));
+		request->send(200, "text/plain", String(gStates[0]) + " " + String(gStates[1]));
+		appendStrToFile("[IO] Etat force ! circuit " + String(circuitNumber) + " => " + String(circuitState) + " ("+request->client()->remoteIP().toString()+")");
 	}
 }
 
@@ -146,6 +147,7 @@ void HandleSetMode(AsyncWebServerRequest *request) { //URI : /SetMode?mode=(0or1
 	else 			Alarm.free(gMyAlarmID); //if manu mode : Delete the alarm
 
 	if (SHOW_DEBUG) Serial.println("[Web-ChgMode] OK : Mode is now : " + String(gModeAuto? "AUTO": "MANU"));
+	appendStrToFile("[Mode] Mode has been changed : " + String(gModeAuto? "AUTO": "MANU") + "("+request->client()->remoteIP().toString()+")");
 	request->send(200, "text/plain", "Mode Changé : " + String(gModeAuto? "AUTO": "MANU"));	
 }
 
@@ -189,7 +191,8 @@ void HandleSetRange(AsyncWebServerRequest *request) {
 	if (SHOW_DEBUG) Serial.println("[Web-ChgRange] OK : Range is now : " + String((gCurRange==1)? "Work(1)": "Holiday(2)"));
 	request->send(200, "text/plain", "Plage Changée : " + String((gCurRange==1)? "Work(1)": "Holiday(2)"));
 
-	CreateNewAlarm(); //Create new alarm, with the new range
+	if (gModeAuto) gMyAlarmID = CreateNewAlarm(); //Create new alarm, with the new range
+	appendStrToFile("[Plage] Plage changée :" + String((gCurRange==1)? "Work(1)": "Holiday(2)") + "("+request->client()->remoteIP().toString()+")");
 }
 
 /**
@@ -251,7 +254,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 	//Check : Presence of POST parameter "body"
 	if (!request->hasParam("body", true)) {
 		if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] Err : Missing POST parameter \"body\"");
-		return request->send(400, "text/plain", "Erreur : Aucune donnée dans le \"body\" (POST)!");
+		return request->send(400, "text/plain", "Erreur : Aucune donnee dans le \"body\" (POST)!");
 	}
 
 	//Parse JSON doc
@@ -262,7 +265,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 	//Check : Deserialisation of JSON string
 	if (err) {
 		if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] Err : deserializeJson() has failed with code : " + String(err.c_str()));
-		return request->send(400, "text/plain", "Erreur : Désérialisation du JSON !");
+		return request->send(400, "text/plain", "Erreur : Deserialisation du JSON !");
 	}
 
 	//Checks : the validity of hours (must be between 00H and 24H)
@@ -270,7 +273,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 		//Test : Between 0 et 23
 		if (!((int)doc[i] >= 0 && (int)doc[i] <= 23)) {
 			if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] Err : one or more hours are not valid (between 0 and 23)");
-			return request->send(400, "text/plain", "Erreur : Les heures doivent être entre 00H et 24H !");
+			return request->send(400, "text/plain", "Erreur : Les heures doivent etre entre 00H et 24H !");
 		}
 	}
 	//Check : Validity of hours (Start Hour is less than the End Hour (and can't be the same))
@@ -278,7 +281,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 		if ((int)doc[i] >= (int)doc[i+1]) {
 			if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] Err : start hour must be strictly less than end hour (" 
 											+ String((int)doc[i]) + " >= " + String((int)doc[i+1]) + ")");
-			return request->send(400, "text/plain", "Erreur : Les heures de départ doivent être strictement inférieurs aux heures de fin ("
+			return request->send(400, "text/plain", "Erreur : Les heures de depart doivent etre strictement inferieurs aux heures de fin ("
 											+ String((int)doc[i]) + " >= " + String((int)doc[i+1]) + ")");
 		}
 	}
@@ -314,6 +317,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 	CreateNewAlarm();
 
 	if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] New Schedule for range " + String((int)doc[0]) + " has been writed !");
+	appendStrToFile("[ProgHoraire] Programmation Modifiee par " + request->client()->remoteIP().toString());
 	request->send(200, "text/plain", "Planning Horaire Ecrit !");
 }
 

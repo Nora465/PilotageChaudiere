@@ -43,10 +43,10 @@
 	#define RELAY_CC1 D5
 	#define RELAY_CC2 D6
 
-	#define TIME_OFFSET_S 3600 //France : UTC+1 (3600 seconds = 1H)
+	#define TIME_OFFSET_S 3600 + 3600 //France : UTC+1 (3600 seconds = 1H) + 1H (heure d'été)
 	#define TIME_UPDATE_INTERVAL 1 * 24 * 60 * 60 * 1000 //1 Day
 
-	#define SHOW_DEBUG true //Show the Serial.println() in the console (Useless when in production)
+	#define SHOW_DEBUG false //Show the Serial.println() in the console (Useless when in production)
 
 //------------- Functions Prototypes ----------------------------------------------------------------------
 	//WLANManagement.cpp
@@ -65,6 +65,10 @@
 	bool ToggleCircuitState(uint8_t circuit, bool state);
 	
 	//FSManagement.cpp
+	void appendStrToFile(String str);
+	bool DeleteLogFile();
+	String FullDate();
+	String TwoDigit(int someDigit);
 	//String 		formatBytes(size_t bytes);
 	//ScheduleWeek 	ReadSchedule();
 	//void 			WriteSchedule(ScheduleWeek schedule);
@@ -83,7 +87,6 @@
 	//TEMP/TEST Handle/functions
 	void HandledabSchedule(AsyncWebServerRequest *request);
 	void startLittleFS();
-	void appendStrToFile(String str);
-	bool DeleteLogFile();
+	
 
 #endif

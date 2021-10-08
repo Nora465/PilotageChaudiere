@@ -26,9 +26,10 @@ void StartNTPClient(NTPClient &timeClient) {
 	//If ESP can't get the time, reboot the ESP
 	//TODO if reboot, send a notification ? or a mail
 	if (timeStatus() == timeSet) {
-		if (SHOW_DEBUG) Serial.println("[NTP Client] Client NTP Démarré (il est " + String(timeClient.getFormattedTime()) + ")");
+		if (SHOW_DEBUG) Serial.println("[NTP Client] Client NTP Demarre (il est " + String(timeClient.getFormattedTime()) + ")");
 	} else {
-		if (SHOW_DEBUG) Serial.println("[NTP Client] Erreur, impossible de mettre à jour l'heure \nRedemarrage...");
+		if (SHOW_DEBUG) Serial.println("[NTP Client] Erreur, impossible de mettre a jour l'heure \nRedemarrage...");
+		appendStrToFile("[Time] Unable to update the time, reboot ...");
 		ESP.restart();
 	}
 }
@@ -72,20 +73,20 @@ AlarmID_t CreateNewAlarm() {
 			hourToTrigger = gSchedule[curDay].P1Start;
 			gNextState = true;
 			if (SHOW_DEBUG) Serial.println("start");
-			appendStrToFile("NextState : start");
+			appendStrToFile("[Alrm-Plage1] Le prochain etat est : START");
 		}
 		else if (hour() < gSchedule[curDay].P1Stop) {
 			hourToTrigger = gSchedule[curDay].P1Stop;
 			gNextState = false; 
 			if (SHOW_DEBUG) Serial.println("stop");
-			appendStrToFile("NextState : stop");
+			appendStrToFile("[Alrm-Plage1] Le prochain etat est : STOP");
 		}
 		else if (hour() >= gSchedule[curDay].P1Stop) {
 			hourToTrigger = gSchedule[(curDay==6)? 0 : curDay+ 1].P1Start; //if curDay is 6, adding one will be out of range, so taking 0
 			retardDayTrigger += 1; //The trigger is for next day
 			gNextState = true;
 			if (SHOW_DEBUG) Serial.println("start+1");
-			appendStrToFile("NextState : start (next day)");
+			appendStrToFile("[Alrm-Plage1] Le prochain etat est : START (next day)");
 		}
 		else {
 			if (SHOW_DEBUG) Serial.println("dab" + String(hour()) + " P1start: " + String(gSchedule[curDay].P1Start) + " P1Stop: " +String(gSchedule[curDay].P1Stop));
@@ -96,20 +97,20 @@ AlarmID_t CreateNewAlarm() {
 			hourToTrigger = gSchedule[curDay].P2Start; 
 			gNextState = true;
 			if (SHOW_DEBUG) Serial.println("start");
-			appendStrToFile("NextState : start");
+			appendStrToFile("[Alrm-Plage2] Le prochain etat est : START");
 		}
 		else if (hour() < gSchedule[curDay].P2Stop) {
 			hourToTrigger = gSchedule[curDay].P2Stop;
 			gNextState = false; 
 			if (SHOW_DEBUG) Serial.println("stop");
-			appendStrToFile("NextState : stop");
+			appendStrToFile("[Alrm-Plage2] Le prochain etat est : STOP");
 		}
 		else if (hour() >= gSchedule[curDay].P2Stop) {
 			hourToTrigger = gSchedule[(curDay==6)? 0 : curDay+ 1].P2Start; //if curDay is 6, adding one will be out of range, so taking 0
 			retardDayTrigger += 1; //The trigger is for next day
 			gNextState = true;
 			if (SHOW_DEBUG) Serial.println("start+1");
-			appendStrToFile("NextState : start (next day)");
+			appendStrToFile("[Alrm-Plage2] Le prochain etat est : START (next day)");
 		}
 		else {
 			if (SHOW_DEBUG) Serial.println("dab" + String(hour()) + " P2start: " + String(gSchedule[curDay].P2Start) + " P2Stop: " +String(gSchedule[curDay].P2Stop));
@@ -121,7 +122,7 @@ AlarmID_t CreateNewAlarm() {
 
 	if (SHOW_DEBUG) Serial.println("day: "+String(curDay) + " actualHour: "+ String(hour()) +" hour: " + String(hourToTrigger));
 	appendStrToFile("(dayofweekNR:" + String(curDay) + ") il est " + String(hour()) + "h // On attend l'alarme pour " + String(hourToTrigger)+"h");
-	appendStrToFile("[currentState] = " + String(digitalRead(RELAY_CC1)));
+	appendStrToFile("[StateCC1] = " + String(!digitalRead(RELAY_CC1)));
 
 	return Alarm.alarmOnce((timeDayOfWeek_t)retardDayTrigger, hourToTrigger, 0, 0, TimeHandle);
 }
@@ -131,7 +132,7 @@ AlarmID_t CreateNewAlarm() {
  */
 void TimeHandle() {
 	bool success = ToggleCircuitState(1, gNextState);
-	appendStrToFile("[TimeTriggered] La modification du circuit est : " + String(success));
+	appendStrToFile("[AlarmRing] L'alarme est arrivee! La modif du circuit 1 est un " + String(success?"Succes":"Echec"));
 
 	gMyAlarmID = CreateNewAlarm();
 	appendStrToFile("==========================");

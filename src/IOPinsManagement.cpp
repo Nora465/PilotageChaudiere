@@ -14,8 +14,8 @@ void SetPinsMode() {
 	pinMode(TEMP_SENSOR, INPUT);
 	pinMode(USB_D_PLUS, OUTPUT);
 	pinMode(USB_D_MINUS, OUTPUT);
-	pinMode(BP1_AUTOMANU, INPUT);
-	pinMode(BP2_FORCEON_OFF, INPUT);
+	pinMode(BP1_AUTOMANU, INPUT_PULLUP);
+	pinMode(BP2_FORCEON_OFF, INPUT_PULLUP);
 	pinMode(LED_CC1, OUTPUT);
 	pinMode(LED_CC2, OUTPUT);
 	pinMode(RELAY_CC1, OUTPUT);
@@ -55,7 +55,7 @@ bool ToggleCircuitState(uint8_t circuit, bool state) {
 	} else return false;
 
 	gStates[circuit - 1] = state;
-	if (SHOW_DEBUG) Serial.println("[IO-chgt] OK - Changed state of circuit " + String(circuit) + ": " + (gStates[circuit] ? "activé" : "désactivé"));
-	appendStrToFile("[IO-chgt] OK - Modification de l'état du circuit n°" + String(circuit) + " => " + (gStates[circuit] ? "ACTIF(1)" : "DESACTIVE(0)"));
+	if (SHOW_DEBUG) Serial.println("[IO] OK - Changed state of circuit " + String(circuit) + ": " + (gStates[circuit] ? "activé" : "désactivé"));
+	//appendStrToFile("[IO] OK - Modification de l'etat du circuit " + String(circuit) + " => " + (gStates[circuit] ? "ACTIF(1)" : "DESACTIVE(0)"));
 	return true;
 }

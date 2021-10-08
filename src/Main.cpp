@@ -16,7 +16,8 @@ ScheduleDay gSchedule[7] = {0,0,0,0,0,0,0};
 bool gShowFullWeek[2] = {true, true}; //how to display the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
 
 bool gStates[2] = {true, true}; //circuits states (NOT RELAYS) CC1: Boiler || CC2: Heaters
-bool gModeAuto = true; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified by androidApp or physically)
+bool gModeAuto = false; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified by androidApp or physically)
+bool gMemBPMANUAUTO = false;
 uint8_t gCurRange= 1; //Current Range (Range2 - Heaters)
 AlarmID_t gMyAlarmID;
 bool gNextState= false; //Next state of the circuit 1 (defined by the schedule)
@@ -41,7 +42,7 @@ void setup() {
 	debug += "\n-epc2: " + String(ESP.getResetInfoPtr()->epc2);
 	debug += "\n-epc3: " + String(ESP.getResetInfoPtr()->epc3) + "\n===";
 	appendStrToFile(debug);
-	Serial.println(debug);
+	if (SHOW_DEBUG) Serial.println(debug);
 //------------------ HANDLE WEB ---------------------------------------------------
 //TODO ajouter une handle "/" pour inviter à télécharger la dernière version de l'appli android
 //----------- States of Relays
@@ -112,6 +113,7 @@ void setup() {
 		gModeAuto = false;
 		ToggleCircuitState(1, true);
 		ToggleCircuitState(2, true);
+		appendStrToFile("[ProgHoraire] Aucun programme enregistré, passage en mode MANUel !");
 	}
 
 	
@@ -121,6 +123,22 @@ void setup() {
 void loop() {
 	//Update the Time if the "update Interval" (inside NTPClient) has been reached (every day)
 	TryToUpdateTime(timeClient);
+
+	//if Mode AUTOMATIC enabled (1 is auto, 0 is manu)
+	bool posModeAuto = !digitalRead(BP1_AUTOMANU);
+	
+	if (posModeAuto && !gMemBPMANUAUTO) {
+		gMemBPMANUAUTO = true;
+		CreateNewAlarm(); //Enable Alarm
+		if (SHOW_DEBUG) Serial.println("[IO] dab auto");
+		appendStrToFile("[IO] Physical Button \"AUTO/MANU\" has been toggle! Now : AUTOMATIC");
+	}
+	if (!posModeAuto && gMemBPMANUAUTO) { //if Mode MANUAL
+		gMemBPMANUAUTO= false;
+		Alarm.free(gMyAlarmID); //disable Alarm
+		if (SHOW_DEBUG) Serial.println("[IO] dab manu");
+		appendStrToFile("[IO] Physical Button \"AUTO/MANU\" has been toggle! Now : MANUAL");
+	}
 	
 	//In AUTO Mode, check if an alarm has reached the threshold, and execute the Handle
 	if (gModeAuto) Alarm.delay(1000);

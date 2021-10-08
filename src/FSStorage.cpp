@@ -10,22 +10,30 @@
 
 void startLittleFS() {
 	if(LittleFS.begin()){ 
-			Serial.println("[LittleFS] OK : LittleFS is mounted !");
-	} else 	Serial.println("[LittleFS] Err : while mounting LittleFS !");
+			if (SHOW_DEBUG) Serial.println("[LittleFS] OK : LittleFS is mounted !");
+	} else 	if (SHOW_DEBUG)Serial.println("[LittleFS] Err : while mounting LittleFS !");
 }
 
 void appendStrToFile(String str) {
 	File file = LittleFS.open("/log.txt", "a");
 	if (!file) {
-		Serial.println("error with the file \"log.txt\"");
+		if (SHOW_DEBUG) Serial.println("error with the file \"log.txt\"");
 		return;
 	}
-	String curDate = String(day()) + "/" +String(month()) + "/" + String(year()) + "--";
-	String curHour = String(hour()) + ":"+String(minute()) + ":" + String(second());
 
-	file.println("[[" + curDate + curHour + "]]  " +  str); //print to file
+	file.println("[[" + FullDate() + "]]  " +  str); //print to file
 	
 	file.close();
+}
+
+String FullDate() {
+	return TwoDigit(day()) + "/" + TwoDigit(month()) + "/" + TwoDigit(year()) + "--"
+		+TwoDigit(hour()) + ":" + TwoDigit(minute()) + ":" + TwoDigit(second());
+}
+
+String TwoDigit(int someDigit) {
+	if (someDigit <= 9) return "0" + String(someDigit);
+	return String(someDigit);
 }
 
 bool DeleteLogFile() {
