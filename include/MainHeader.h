@@ -23,6 +23,7 @@
 	#include <NTPClient.h>			//Retreive the Network Time
 	#include <TimeLib.h>			//Time Lib, byArduino
 	#include <TimeAlarms.h>			//
+	#include <Timezone.h>			//Timezones (Also manage the DST)
 
 	//Storage-Related Libraries
 	#include <EEPROM.h>				//Access EEPROM (store the schedule)
@@ -43,10 +44,12 @@
 	#define RELAY_CC1 D5
 	#define RELAY_CC2 D6
 
+	#define NUM_OF_PERIODS 2
+	
 	#define TIME_OFFSET_S 3600 + 3600 //France : UTC+1 (3600 seconds = 1H) + 1H (heure d'été)
 	#define TIME_UPDATE_INTERVAL 1 * 24 * 60 * 60 * 1000 //1 Day
 
-	#define SHOW_DEBUG false //Show the Serial.println() in the console (Useless when in production)
+	#define SHOW_DEBUG true //Show the Serial.println() in the console (Useless when in production)
 
 //------------- Functions Prototypes ----------------------------------------------------------------------
 	//WLANManagement.cpp
@@ -59,7 +62,6 @@
 	void HandleSetRange(AsyncWebServerRequest *request);
 	void HandleGetSchedule(AsyncWebServerRequest *request, bool useFullWeek[2]);
 	void HandleModifySchedule(AsyncWebServerRequest *request, bool useFullWeek[2]);
-	void writeFirstThing();
 	//IOPinsManagement.cpp
 	void SetPinsMode();
 	bool ToggleCircuitState(uint8_t circuit, bool state);
@@ -74,18 +76,17 @@
 	//void 			WriteSchedule(ScheduleWeek schedule);
 
 	//ScheduleStorage.cpp
-	bool LoadEEPROMSchedule(ScheduleDay schedule[6], bool displayValues= false);
-	void WriteScheduleToEEPROM(ScheduleDay schedule[6]);
+	bool LoadEEPROMSchedule(ScheduleDay schedule[7], bool displayValues= false);
+	void WriteScheduleToEEPROM(ScheduleDay schedule[7]);
 
 	//TimeManagement.cpp
 	void StartNTPClient(NTPClient &timeClient);
 	void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate= false);
 	uint8_t GetNonRetardDay();
-	AlarmID_t CreateNewAlarm();
+	void CreateNewAlarm();
 	void TimeHandle();
 
 	//TEMP/TEST Handle/functions
-	void HandledabSchedule(AsyncWebServerRequest *request);
 	void startLittleFS();
 	
 

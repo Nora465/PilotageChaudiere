@@ -9,7 +9,8 @@
 //TODO faire une fonction de validation (pour toutes les handles), pour éviter la répétitivité
 #include "MainHeader.h"
 
-extern ScheduleDay gSchedule[6];
+extern ScheduleDay gOldSchedule[7];
+extern ScheduleDay gSchedule[7];
 extern AlarmID_t gMyAlarmID;
 extern bool gStates[2];
 extern bool gModeAuto;
@@ -41,11 +42,13 @@ void ConnectToAP() {
 	if (SHOW_DEBUG) Serial.println("\n[WiFi] Connexion réussie !");
 
 	//Display the network name and the @IP of the ESP
-	if (SHOW_DEBUG) Serial.println();
-	if (SHOW_DEBUG) Serial.print("[WiFi] Connecté à \"");
-	if (SHOW_DEBUG) Serial.print(WiFi.SSID()); Serial.println("\"");
-	if (SHOW_DEBUG) Serial.print("[WiFi] @IP : ");
-	if (SHOW_DEBUG) Serial.println(WiFi.localIP());
+	if (SHOW_DEBUG) {
+		Serial.println();
+		Serial.print("[WiFi] Connecté à \"");
+		Serial.print(WiFi.SSID()); Serial.println("\"");
+		Serial.print("[WiFi] @IP : ");
+		Serial.println(WiFi.localIP());
+	}
 }
 
 /**
@@ -106,8 +109,8 @@ void HandleForceState(AsyncWebServerRequest *request) { //URI : /ForceState?circ
  * @param request *AsyncWebServerRequest - reference to the request of a client
  */
 void HandleGetMode(AsyncWebServerRequest *request) { //URI : /GetMode
-	//FIXME Quand je démarre l'application android, il affiche uniquement "AUTO" dans le serial
-	if (SHOW_DEBUG) Serial.println("[Web-getMode] OK : Mode have been sent to the client : " + gModeAuto? "AUTO": "MANU");
+	//REVIEW fixé, à tester : Quand je démarre l'application android, il affiche uniquement "AUTO" dans le serial (ajouté le String(...), voir si ça change)
+	if (SHOW_DEBUG) Serial.println("[Web-getMode] OK : Mode have been sent to the client : " + String(gModeAuto? "AUTO": "MANU"));
 	request->send(200, "text/plain", String(gModeAuto));
 }
 
@@ -156,8 +159,8 @@ void HandleSetMode(AsyncWebServerRequest *request) { //URI : /SetMode?mode=(0or1
  * @param request *AsyncWebServerRequest - reference to the request of a client
  */
 void HandleGetRange(AsyncWebServerRequest *request) {
-	//FIXME Quand je démarre l'application android, il affiche uniquement "Work(1)" dans le serial
-	if (SHOW_DEBUG) Serial.println("[Web-getRange] OK : Range have been sent to the client : " + (gCurRange==1)? "Work(1)": "Holiday(2)");
+	//REVIEW fixé, à tester : Quand je démarre l'application android, il affiche uniquement "Work(1)" dans le serial (ajouté le String(...), voir si ça change)
+	if (SHOW_DEBUG) Serial.println("[Web-getRange] OK : Range have been sent to the client : " + String(gCurRange == 1? "Work(1)": "Holiday(2)"));
 	request->send(200, "text/plain", String(gCurRange));
 }
 
@@ -191,20 +194,36 @@ void HandleSetRange(AsyncWebServerRequest *request) {
 	if (SHOW_DEBUG) Serial.println("[Web-ChgRange] OK : Range is now : " + String((gCurRange==1)? "Work(1)": "Holiday(2)"));
 	request->send(200, "text/plain", "Plage Changée : " + String((gCurRange==1)? "Work(1)": "Holiday(2)"));
 
-	if (gModeAuto) gMyAlarmID = CreateNewAlarm(); //Create new alarm, with the new range
-	appendStrToFile("[Plage] Plage changée :" + String((gCurRange==1)? "Work(1)": "Holiday(2)") + "("+request->client()->remoteIP().toString()+")");
+	if (gModeAuto) CreateNewAlarm(); //Create new alarm, with the new range
+	appendStrToFile("[Plage] Plage changee :" + String((gCurRange==1)? "Work(1)": "Holiday(2)") + "("+request->client()->remoteIP().toString()+")");
 }
 
 /**
  * ESP ==> AndroidApp : Send the Schedule for the requested Range to the web client
  * @param request *AsyncWebServerRequest - reference to the request of a client
- * @param schedule ScheduleDay[6] - Reference to the schedule, stored in a structure
  * @param showFullWeek bool[2] - Reference to how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  */
 void HandleGetSchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { //URI : /GetSchedule?range=(1 ou 2)
-	//Representation of JSON document if FullWeek     : ["Lun1", "Lun2", "Mar1", "Mar2", ...., "Dim1", "Dim2"]
-	//Representation of JSON document if Week+Weekend : ["Week1", "Week2", "WE1", "WE2"]
+	//first element of array indicate the fullweek (or not)
+	/*Representation of JSON document if FullWeek     : 
+	[
+		0 (FullWeek), 
+		[Lun1Start, Lun1Stop, Lun2Start, Lun2Stop],
+		[Mar1Start, Mar1Stop, Mar2Start, Mar2Stop],
+		[Mer1Start, Mer1Stop, Mer2Start, Mer2Stop],
+		[Jeu1Start, Jeu1Stop, Jeu2Start, Jeu2Stop],
+		[Ven1Start, Ven1Stop, Ven2Start, Ven2Stop],
+		[Sam1Start, Sam1Stop, Sam2Start, Sam2Stop],
+		[Dim1Start, Dim1Stop, Dim2Start, Dim2Stop]
+	]
 
+	Representation of JSON document if Week+Weekend : 
+	[
+		1 (FullWeek), 
+		[Week1Start, Week1Stop, Week2Start, Week2Stop],
+		[WE1Start,   WE1Stop,   WE2Start,   WE2Stop]
+	]
+	*/
 	//check : Presence of GET parameters "range"
 	if (!request->hasParam("range")) {
 		if (SHOW_DEBUG) Serial.println("[Web-sendSched] Err : Missing GET Argument : \"range\"");
@@ -212,29 +231,47 @@ void HandleGetSchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { /
 	}
 
 	//Check : Validity of the value of the Param "range" (must be 1 or 2)
-	uint8_t paramRange = request->getParam("range")->value().toInt(); //atoi: convert Str to Int
+	uint8_t paramRange = request->getParam("range")->value().toInt();
 	if (paramRange != 1 && paramRange != 2) {
 		if (SHOW_DEBUG) Serial.println("[Web-sendSched] Err : Bad Value for \"range\" param (1or2)");
 		return request->send(400, "text/plain", "Erreur : Le paramètre GET \"range\" doit être 1 ou 2");
 	}
 	
 	//Adding data to the JSON string
-	String jsonString;
+	//String jsonString = String(paramRange - 1) + ",";
+	String jsonString = String(!showFullWeek[paramRange - 1]) + ",";
 
 	if (showFullWeek[paramRange - 1]) {//FullWeek : we send all the schedule to the WebClient
-		for (uint8_t i= 0; i < 7; i++) { 
+		for (uint8_t i=0; i < DAYS_PER_WEEK; i++) { 
 			//Adding schedule data to the JSON
-			if 		(paramRange == 1) 	jsonString += String(gSchedule[i].P1Start) + "," + String(gSchedule[i].P1Stop);
-			else if (paramRange == 2) 	jsonString += String(gSchedule[i].P2Start) + "," + String(gSchedule[i].P2Stop);
-			
+
+			jsonString += "[";
+			for (uint8_t j=0; j < NUM_OF_PERIODS; j++) {
+				jsonString += String(gSchedule[i].Ranges[paramRange-1].Periods[j].Start) + ',';
+				jsonString += String(gSchedule[i].Ranges[paramRange-1].Periods[j].Stop);
+				if (j < NUM_OF_PERIODS -1) jsonString += ',';
+			}
+			jsonString += "]";
+
 			if (i < 6) jsonString += ","; //don't put a comma at the end
 		}
 	} else { //Week+Weekend : we only send the monday values 5 times, and Saturday 2 times
-		if 		(paramRange == 1) 	jsonString += String(gSchedule[0].P1Start) + "," + String(gSchedule[0].P1Stop)  + ","
-												+ String(gSchedule[5].P1Start) + "," + String(gSchedule[5].P1Stop);
-		else if (paramRange == 2) 	jsonString += String(gSchedule[0].P2Start) + "," + String(gSchedule[0].P2Stop)  + ","
-												+ String(gSchedule[5].P2Start) + "," + String(gSchedule[5].P2Stop);
+
+		jsonString += "[";
+		for (uint8_t i=0; i < NUM_OF_PERIODS; i++) {
+			jsonString += String(gSchedule[0].Ranges[paramRange-1].Periods[i].Start) + ',';
+			jsonString += String(gSchedule[0].Ranges[paramRange-1].Periods[i].Stop);
+			if (i < NUM_OF_PERIODS -1) jsonString += ',';
+		}
+		jsonString += "],[";
+		for (uint8_t i=0; i < NUM_OF_PERIODS; i++) {
+			jsonString += String(gSchedule[5].Ranges[paramRange-1].Periods[i].Start) + ',';
+			jsonString += String(gSchedule[5].Ranges[paramRange-1].Periods[i].Stop);
+			if (i < NUM_OF_PERIODS -1) jsonString += ',';
+		}
+		jsonString += "]";
 	}
+	Serial.println(jsonString);
 
 	//send the JSON String to the Web Client (Android Application)
 	if (SHOW_DEBUG) Serial.println("[Web-sendSched] Schedule of range " + String(paramRange) + " has been sent to WebClient");
@@ -244,12 +281,30 @@ void HandleGetSchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { /
 /**
  * AndroidApp ==> ESP : Change the schedule of the specified range
  * @param request *AsyncWebServerRequest - reference to the request of a client
- * @param schedule ScheduleDay[6] - Reference to the schedule, stored in a structure
  * @param showFullWeek bool[2] - Reference to how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  */
 void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { //URI : /ModifySchedule (data is POST)
-	//Representation of JSON document if FullWeek    : ["Plage (1 ou 2)", "Lun1", "Lun2", "Mar1", "Mar2", ...., "Dim1", "Dim2"]
-	//Representation of JSON document if Week+Weekend: ["Plage (1 ou 2)", "Week1", "Week2", "WE1", "WE2"]
+	/*Representation of JSON document if FullWeek     : 
+	[
+		Plage (1 ou 2)
+		0 (FullWeek), 
+		[Lun1Start, Lun1Stop, Lun2Start, Lun2Stop],
+		[Mar1Start, Mar1Stop, Mar2Start, Mar2Stop],
+		[Mer1Start, Mer1Stop, Mer2Start, Mer2Stop],
+		[Jeu1Start, Jeu1Stop, Jeu2Start, Jeu2Stop],
+		[Ven1Start, Ven1Stop, Ven2Start, Ven2Stop],
+		[Sam1Start, Sam1Stop, Sam2Start, Sam2Stop],
+		[Dim1Start, Dim1Stop, Dim2Start, Dim2Stop]
+	]
+
+	Representation of JSON document if Week+Weekend : 
+	[
+		Plage (1 ou 2)
+		1 (Week+Weekend), 
+		[Week1Start, Week1Stop, Week2Start, Week2Stop],
+		[WE1Start,   WE1Stop,   WE2Start,   WE2Stop]
+	]
+	*/
 
 	//Check : Presence of POST parameter "body"
 	if (!request->hasParam("body", true)) {
@@ -257,8 +312,10 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 		return request->send(400, "text/plain", "Erreur : Aucune donnee dans le \"body\" (POST)!");
 	}
 
+	Serial.println(request->getParam("body", true)->value());
+
 	//Parse JSON doc
-	const int capacity = JSON_ARRAY_SIZE(15) + 60; //array=15 (7 days * 2hours + 1 for the range) + 60 (strings size)
+	const int capacity = 7*JSON_ARRAY_SIZE(4) + JSON_ARRAY_SIZE(9); //(7days * (2Period * 2startStop) + 9 array size (in total)
 	StaticJsonDocument<capacity> doc;
 	DeserializationError err = deserializeJson(doc, request->getParam("body", true)->value());
 	
@@ -269,46 +326,56 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 	}
 
 	//Checks : the validity of hours (must be between 00H and 24H)
-	for (uint8_t i= 1; i < doc.size(); i++) { //Offset of 1 (because the first value is the range)
-		//Test : Between 0 et 23
-		if (!((int)doc[i] >= 0 && (int)doc[i] <= 23)) {
-			if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] Err : one or more hours are not valid (between 0 and 23)");
-			return request->send(400, "text/plain", "Erreur : Les heures doivent etre entre 00H et 24H !");
+	for (uint8_t i= 2; i < doc.size(); i++) { //Offset of 1 (because the first value is the range)
+		Serial.println(String((int)doc[i][0]) + " " + String((int)doc[i][1]) + " " + String((int)doc[i][2]) + " " + String((int)doc[i][3]));
+		for (uint8_t j=0; j< 4; j++) {
+			//Test : Between 0 et 23
+			if (!((int)doc[i][j] >= 0 && (int)doc[i][j] <= 23)) {
+				if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] Err : one or more hours are not valid (between 0 and 23)");
+				return request->send(400, "text/plain", "Erreur : Les heures doivent etre entre 00H et 24H !");
+			}
 		}
 	}
+
 	//Check : Validity of hours (Start Hour is less than the End Hour (and can't be the same))
-	for (uint8_t i = 1; i < doc.size(); i+= 2) { //Increment by 2, because the hours come by pair
-		if ((int)doc[i] >= (int)doc[i+1]) {
+	//TODO refaire la vérif => il faut que [2,4,17,22] soit dans l'ordre croissant
+	/*for (uint8_t i = 2; i < doc.size(); i++) {
+		Serial.println(String((int)doc[i][0]) + " " + String((int)doc[i][1]) + " " + String((int)doc[i][2]) + " " + String((int)doc[i][3]));
+		if ((int)doc[i][0] >= (int)doc[i][1] and (int)doc[i][1] >= (int)doc[i][2] and (int)doc[i][2] >= (int)doc[i][3]) {
 			if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] Err : start hour must be strictly less than end hour (" 
 											+ String((int)doc[i]) + " >= " + String((int)doc[i+1]) + ")");
 			return request->send(400, "text/plain", "Erreur : Les heures de depart doivent etre strictement inferieurs aux heures de fin ("
 											+ String((int)doc[i]) + " >= " + String((int)doc[i+1]) + ")");
 		}
+	}*/
+
+	//save the method to display the schedule (doc[0] is the range)
+	showFullWeek[(int)doc[0] - 1] = ((int)doc[1] == 0); //doc[1] is FullWeek information from phone app
+
+	//Put the new schedule in the structure
+	for (uint8_t i= 0; i < DAYS_PER_WEEK; i++) {
+		//Populating the schedule Structure
+		for (uint8_t j = 0; j < NUM_OF_PERIODS; j++) {
+			if (showFullWeek[(int)doc[0]-1]) { //show FullWeek
+				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Start = doc[2+i][2 *j];
+				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Stop  = doc[2+i][2 *j +1];
+			} else { //show Week+Weekend
+				//(i<5)?2:3 => 5 first days is the "week" and the last 2 are "weekend"
+				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Start = doc[(i<5) ?2 :3][2 *j];
+				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Stop  = doc[(i<5) ?2 :3][2 *j +1];
+			}
+		}
 	}
 
-	//save the method to display the schedule (doc[0] is the selected range)
-	showFullWeek[(int)doc[0] - 1] = (doc.size() == 15); //size=15 OR 5
-	
-	//Put the new schedule in the structure
-	uint8_t startHourIndex = 0;
-	for (uint8_t i= 0; i < 7; i++) {
-		//Computing the index of the array from the android application
-		if (showFullWeek[(int)doc[0] - 1]) {//show FullWeek
-							startHourIndex= 1 + 2*i; //1 (offset for the Range)+ 2*i (a 14 array go into a 7 array, so i*2)
-		} else {//show Week+Weekend
-			//5 first day is the "Week" and the 2 last is the "WeekEnd"
-			if (i < 5) 		startHourIndex= 1; //+1 (offset for the Range)
-			else 			startHourIndex= 3; 
-		}
-		
-		//Populating the Schedule Structure
-		if (doc[0] == "1") { //doc[0] is the range
-			gSchedule[i].P1Start = doc[startHourIndex]; 
-			gSchedule[i].P1Stop  = doc[startHourIndex + 1]; //+1 (offset for the Stop Hour (that comes just after the start hour))
-		} else if (doc[0] == "2") {
-			gSchedule[i].P2Start = doc[startHourIndex];
-			gSchedule[i].P2Stop  = doc[startHourIndex + 1]; //+1 (offset for the Stop Hour (that comes just after the start hour))
-		}
+	//Print the values of the read structure
+	for (uint8_t i= 0; i < DAYS_PER_WEEK; i++) {
+			if (SHOW_DEBUG) Serial.println(String(i+1) + "eme jour  P1(1er période) : " + String(gSchedule[i].Ranges[0].Periods[0].Start) + "H-" + String(gSchedule[i].Ranges[0].Periods[0].Stop) + "H");
+			if (SHOW_DEBUG) Serial.println(String(i+1) + "eme jour  P1(2em période) : " + String(gSchedule[i].Ranges[0].Periods[1].Start) + "H-" + String(gSchedule[i].Ranges[0].Periods[1].Stop) + "H");
+	}
+	if (SHOW_DEBUG) Serial.println("");
+	for (uint8_t i= 0; i < DAYS_PER_WEEK; i++) {
+		if (SHOW_DEBUG) Serial.println(String(i+1) + "eme jour  P2(1er période) : " + String(gSchedule[i].Ranges[1].Periods[0].Start) + "H-" + String(gSchedule[i].Ranges[1].Periods[0].Stop) + "H");
+		if (SHOW_DEBUG) Serial.println(String(i+1) + "eme jour  P2(2em période) : " + String(gSchedule[i].Ranges[1].Periods[1].Start) + "H-" + String(gSchedule[i].Ranges[1].Periods[1].Stop) + "H");
 	}
 
 	//Write the schedule structure in the EEPROM
@@ -319,21 +386,4 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 	if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] New Schedule for range " + String((int)doc[0]) + " has been writed !");
 	appendStrToFile("[ProgHoraire] Programmation Modifiee par " + request->client()->remoteIP().toString());
 	request->send(200, "text/plain", "Planning Horaire Ecrit !");
-}
-
-//========================================= TEMPORAIRE ! ================================
-//temp function to test the time schedule
-//TODO à supprimer si tests finis
-void HandledabSchedule(AsyncWebServerRequest *request) {
-	uint8_t myHour = request->getParam("hour")->value().toInt();
-	uint8_t myMinute = request->getParam("minute")->value().toInt();
-	uint8_t mySecond = request->getParam("second")->value().toInt();
-	uint8_t myDay = request->getParam("day")->value().toInt();
-
-	setTime(myHour, myMinute, mySecond, myDay,1,2021);
-	Alarm.disable(gMyAlarmID);
-	Alarm.enable(gMyAlarmID);
-	Serial.println("TIME IS NOW (day=" + String(day()) + "): " + String(hour()) + " H "+ String(minute()) + " MIN " + String(second())+" SEC");
-	request->send(200, "text/plain", "OK");
-
 }

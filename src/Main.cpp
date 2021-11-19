@@ -11,13 +11,19 @@ AsyncWebServer	server(50500);	// Instantiate an AsyncWebServer (listen to reques
 WiFiUDP 		ntpUDP; //The UDP instance for NTPClient
 NTPClient 		timeClient(ntpUDP, "europe.pool.ntp.org", TIME_OFFSET_S, TIME_UPDATE_INTERVAL);
 
-//TODO passer la structure en un tableau 2D gSchedule[7(jours)][4(P1Start, P2...)]
-ScheduleDay gSchedule[7] = {0,0,0,0,0,0,0};
+//TimeZone STD "Standard" and DST "DayLight Savings"
+TimeChangeRule frSTD = {"CET",  Last, Sun, Oct, 3, 60};  //CET  : UTC+1 (Winter)
+TimeChangeRule frDST = {"CEST", Last, Sun, Mar, 2, 120}; //CEST : UTC+2 (Summer)
+Timezone TZ_fr(frDST, frSTD);
+
+ScheduleDay gSchedule[7]; //index 0->6
+
 bool gShowFullWeek[2] = {true, true}; //how to display the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
 
 bool gStates[2] = {true, true}; //circuits states (NOT RELAYS) CC1: Boiler || CC2: Heaters
-bool gModeAuto = false; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified by androidApp or physically)
-bool gMemBPMANUAUTO = false;
+bool gModeAuto = true; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified by androidApp or physically)
+//FIXME si on est en MANU (si pas de planning), qu'on envoit un planning, on passe en manu, mais l'appli n'affiche pas ce mode
+bool gMemBPMANUAUTO = false; //memorize the previous state (for loop())
 uint8_t gCurRange= 1; //Current Range (Range2 - Heaters)
 AlarmID_t gMyAlarmID;
 bool gNextState= false; //Next state of the circuit 1 (defined by the schedule)
@@ -81,11 +87,6 @@ void setup() {
 		HandleModifySchedule(request, gShowFullWeek);
 	});
 
-	//TODO Test Code - à supprimer quand les tests sont reussis
-	server.on("/UpdateHour", [](AsyncWebServerRequest *request) {
-		HandledabSchedule(request);
-	});
-
 	server.on("/deleteLog", [](AsyncWebServerRequest *request) {
 		bool success = DeleteLogFile();
 		request->send((success)?200:404, "text/plain", (success)?"Fichier log.txt effacé !":"erreur pendant la suppresion du fichier log.txt");
@@ -107,14 +108,18 @@ void setup() {
 
 	//Read Schedule from EEPROM
 	bool success = LoadEEPROMSchedule(gSchedule, true);
-	if (success) gMyAlarmID = CreateNewAlarm(); //Create an alarm to change the state of circuit (when schedule say so)
-	else {
+
+	if (success) {
+		gModeAuto = true;
+		CreateNewAlarm(); //Create an alarm to change the state of circuit (when schedule say so)
+	} else {
 		//if error while loading the schedule from EEPROM, enable Manual mode, and activate both circuits
 		gModeAuto = false;
 		ToggleCircuitState(1, true);
 		ToggleCircuitState(2, true);
 		appendStrToFile("[ProgHoraire] Aucun programme enregistré, passage en mode MANUel !");
 	}
+	if (SHOW_DEBUG) Serial.println("Alarm ID : " + String(gMyAlarmID));
 
 	
 	appendStrToFile("==========================");

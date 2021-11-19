@@ -6,10 +6,10 @@
 */
 
 #include "MainHeader.h"		//Global Header File
-#include "DailySchedule.h"	//Management of the daily schedule
 
 //Global variables : Main.cpp
-extern ScheduleDay gSchedule[6];
+extern Timezone TZ_fr;
+extern ScheduleDay gSchedule[7];
 extern NTPClient timeClient;
 extern AlarmID_t gMyAlarmID;
 extern uint8_t gCurRange;
@@ -42,80 +42,114 @@ void StartNTPClient(NTPClient &timeClient) {
 void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate) {
 	//if forceUpdate is True,  Force the update (Send a request to NTPServer to get the Epoch time)
 	//if forceUpdate is False, will update only if lastUpdate > updateInterval (1 day))
-	bool TimeWasUpdated = forceUpdate ? timeClient.forceUpdate() : timeClient.update();
-	//If NTPTime has been updated, update the Time
-	if (TimeWasUpdated) setTime((time_t) timeClient.getEpochTime() + TIME_OFFSET_S);
+	forceUpdate ? timeClient.forceUpdate() : timeClient.update();
+	
+	//True local time, depending on DST and time offset
+	time_t localTime = TZ_fr.toLocal(timeClient.getEpochTime());
+
+	//If the ESP time is not the local time => update the Time
+	if (now() != localTime) {
+		setTime(localTime);
+	}
 }
 
 /**
- * Return the current day of the week (0 is monday, and 6 is sunday)
+ * Return the current day of the week (1 is monday, and 7 is sunday)
  * Use weekday() (this return 1 for sunday, 2 is monday ... and 6 for sunday)
  * @return uint8_t - The current day of the week
  */
-uint8_t GetNonRetardDay() {
-	if (weekday() == 1) return 6;
-	else 				return weekday() - 2;
+uint8_t GetNormalWeekDay() {
+	if (weekday() == 1) return 7;
+	else 				return weekday() - 1;
 }
 
 /**
  * Set or Overwrite the alarm of the schedule (and updates the state of circuit 1)
- * @return AlarmdID_t(uint8_t) - ID of the alarm (0 if error)
  */
-AlarmID_t CreateNewAlarm() {
+void CreateNewAlarm() {
 	if (Alarm.isAllocated(gMyAlarmID)) Alarm.free(gMyAlarmID); //Delete the old alarm (if already allocated)
 
-	uint8_t curDay = GetNonRetardDay(); //Current day of the week (0: Monday .. 6:Sunday) for the schedule array
-	uint8_t retardDayTrigger = weekday(); //Set the day on which the alarm need to be triggered
-	
-	uint8_t hourToTrigger = 0;
-	if (gCurRange == 1) {//Work Range
-		if (hour() < gSchedule[curDay].P1Start) {
-			hourToTrigger = gSchedule[curDay].P1Start;
-			gNextState = true;
+	uint8_t curDay = GetNormalWeekDay() - 1; //Current day of the week (0: Monday .. 6:Sunday) for the schedule array
+	uint8_t curWeekDay = weekday(); //memorize the week day for further use
+
+	//Range 1 : Work Range
+	//Range 2 : Holiday Range
+	uint8_t tempTriggerHour=0, hourToTrigger=0, tempRetardDayTrigger=0, retardDayTrigger=0;
+	bool tempNextState=false, NextState=false;
+		//Loop through all periods
+	for (uint8_t i=0; i<NUM_OF_PERIODS; i++) {
+
+		if (hour() < gSchedule[curDay].Ranges[gCurRange-1].Periods[i].Start) {
+			tempTriggerHour = gSchedule[curDay].Ranges[gCurRange-1].Periods[i].Start;
+			tempNextState = true;
+			tempRetardDayTrigger= curWeekDay;
 			if (SHOW_DEBUG) Serial.println("start");
 			appendStrToFile("[Alrm-Plage1] Le prochain etat est : START");
 		}
-		else if (hour() < gSchedule[curDay].P1Stop) {
-			hourToTrigger = gSchedule[curDay].P1Stop;
-			gNextState = false; 
+		else if (hour() < gSchedule[curDay].Ranges[gCurRange-1].Periods[i].Stop) {
+			tempTriggerHour = gSchedule[curDay].Ranges[gCurRange-1].Periods[i].Stop;
+			tempNextState = false; 
+			tempRetardDayTrigger= curWeekDay;
 			if (SHOW_DEBUG) Serial.println("stop");
 			appendStrToFile("[Alrm-Plage1] Le prochain etat est : STOP");
 		}
-		else if (hour() >= gSchedule[curDay].P1Stop) {
-			hourToTrigger = gSchedule[(curDay==6)? 0 : curDay+ 1].P1Start; //if curDay is 6, adding one will be out of range, so taking 0
-			retardDayTrigger += 1; //The trigger is for next day
-			gNextState = true;
+		//TODO peut etre mettre un else à la place ?
+		else if (hour() >= gSchedule[curDay].Ranges[gCurRange-1].Periods[i].Stop) {
+			//if curDay is 6, adding one will be out of range, so taking 0
+			tempTriggerHour = gSchedule[(curDay==6)? 0 : curDay+ 1].Ranges[gCurRange-1].Periods[i].Start;
+			tempNextState = true;
+			tempRetardDayTrigger = curWeekDay + 1; //The trigger is for next day
 			if (SHOW_DEBUG) Serial.println("start+1");
 			appendStrToFile("[Alrm-Plage1] Le prochain etat est : START (next day)");
 		}
-		else {
-			if (SHOW_DEBUG) Serial.println("dab" + String(hour()) + " P1start: " + String(gSchedule[curDay].P1Start) + " P1Stop: " +String(gSchedule[curDay].P1Stop));
-		}
 
-	} else if (gCurRange == 2) { //Holiday Range
-		if (hour() < gSchedule[curDay].P2Start) {
-			hourToTrigger = gSchedule[curDay].P2Start; 
-			gNextState = true;
-			if (SHOW_DEBUG) Serial.println("start");
-			appendStrToFile("[Alrm-Plage2] Le prochain etat est : START");
+		//First loop => don't check
+		if (i == 0) {
+			NextState= tempNextState;
+			hourToTrigger= tempTriggerHour;
+			retardDayTrigger= tempRetardDayTrigger;
+		} else {
+			//1st case : Both start Periods are "True"
+			if (NextState and tempNextState) {
+				NextState = true;
+				//1.1 case : Both periods start today => TriggerHour takes the lowest trigger hour
+				if (tempRetardDayTrigger == curWeekDay and retardDayTrigger == curWeekDay) {
+					hourToTrigger = min(hourToTrigger, tempTriggerHour);
+					retardDayTrigger = curWeekDay;
+					if (SHOW_DEBUG) Serial.println("case 1.1");
+					appendStrToFile("case 1.1 - " + String(hourToTrigger) + "/" + String(tempTriggerHour));
+				//1.2 case : Both periods start tomorrow => TriggerHour takes the lowest trigger hour
+				}
+				else if (tempRetardDayTrigger == curWeekDay+1 and retardDayTrigger == curWeekDay+1) {
+					hourToTrigger = min(hourToTrigger, tempTriggerHour);
+					retardDayTrigger = curWeekDay + 1;
+					if (SHOW_DEBUG) Serial.println("case 1.2");
+					appendStrToFile("case 1.2 - "+ String(hourToTrigger) + "/" + String(tempTriggerHour));
+				//1.3 case : One of periods start tomorrow => TriggerHour takes the "true" start period
+				//TODO on peut le passer en "else" non ?
+				}
+				else if (tempRetardDayTrigger == curWeekDay+1 or retardDayTrigger == curWeekDay+1) {
+					hourToTrigger = (tempRetardDayTrigger == curWeekDay)? tempTriggerHour: hourToTrigger;
+					retardDayTrigger = (tempRetardDayTrigger== curWeekDay)? tempRetardDayTrigger: retardDayTrigger;
+					if (SHOW_DEBUG) Serial.println("case 1.3");
+					appendStrToFile("case 1.3 - "+ String(hourToTrigger) + "/" + String(tempTriggerHour));
+				}
+			}
+			//2nd case : One of periods is "FALSE" => TriggerHour takes the false period's hour
+			else if(!NextState or !tempNextState) {
+				if (SHOW_DEBUG) Serial.println("second case");
+				appendStrToFile("case 2 - "+ String(hourToTrigger) + "/" + String(tempTriggerHour));
+				NextState = false;
+				hourToTrigger= !tempNextState? tempTriggerHour: hourToTrigger;
+			}
 		}
-		else if (hour() < gSchedule[curDay].P2Stop) {
-			hourToTrigger = gSchedule[curDay].P2Stop;
-			gNextState = false; 
-			if (SHOW_DEBUG) Serial.println("stop");
-			appendStrToFile("[Alrm-Plage2] Le prochain etat est : STOP");
-		}
-		else if (hour() >= gSchedule[curDay].P2Stop) {
-			hourToTrigger = gSchedule[(curDay==6)? 0 : curDay+ 1].P2Start; //if curDay is 6, adding one will be out of range, so taking 0
-			retardDayTrigger += 1; //The trigger is for next day
-			gNextState = true;
-			if (SHOW_DEBUG) Serial.println("start+1");
-			appendStrToFile("[Alrm-Plage2] Le prochain etat est : START (next day)");
-		}
-		else {
-			if (SHOW_DEBUG) Serial.println("dab" + String(hour()) + " P2start: " + String(gSchedule[curDay].P2Start) + " P2Stop: " +String(gSchedule[curDay].P2Stop));
-		}
-	} else return 0;
+	}
+
+	if (SHOW_DEBUG) Serial.println("Next State is : " + String(NextState?"True":"False"));
+	if (SHOW_DEBUG) Serial.println("Next Alarm hour : " + String(hourToTrigger));
+	appendStrToFile("Next State is " + String(NextState?"true":"false") +" \nNext Alarm hour : "+hourToTrigger);
+
+	gNextState= NextState;
 
 	//Update the outputs (relays and leds)
 	ToggleCircuitState(1, !gNextState);
@@ -124,7 +158,7 @@ AlarmID_t CreateNewAlarm() {
 	appendStrToFile("(dayofweekNR:" + String(curDay) + ") il est " + String(hour()) + "h // On attend l'alarme pour " + String(hourToTrigger)+"h");
 	appendStrToFile("[StateCC1] = " + String(!digitalRead(RELAY_CC1)));
 
-	return Alarm.alarmOnce((timeDayOfWeek_t)retardDayTrigger, hourToTrigger, 0, 0, TimeHandle);
+	gMyAlarmID = Alarm.alarmOnce((timeDayOfWeek_t)retardDayTrigger, hourToTrigger, 0, 0, TimeHandle);
 }
 
 /**
@@ -132,8 +166,8 @@ AlarmID_t CreateNewAlarm() {
  */
 void TimeHandle() {
 	bool success = ToggleCircuitState(1, gNextState);
-	appendStrToFile("[AlarmRing] L'alarme est arrivee! La modif du circuit 1 est un " + String(success?"Succes":"Echec"));
+	appendStrToFile("[AlarmRing] L'alarme est arrivee! La modif du circuit 1 est un : " + String(success?"Succes":"Echec"));
 
-	gMyAlarmID = CreateNewAlarm();
+	CreateNewAlarm();
 	appendStrToFile("==========================");
 }
