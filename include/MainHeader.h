@@ -60,8 +60,8 @@
 	void HandleSetMode(AsyncWebServerRequest *request);
 	void HandleGetRange(AsyncWebServerRequest *request);
 	void HandleSetRange(AsyncWebServerRequest *request);
-	void HandleGetSchedule(AsyncWebServerRequest *request, bool useFullWeek[2]);
-	void HandleModifySchedule(AsyncWebServerRequest *request, bool useFullWeek[2]);
+	void HandleGetSchedule(AsyncWebServerRequest *request);
+	void HandleModifySchedule(AsyncWebServerRequest *request);
 	//IOPinsManagement.cpp
 	void SetPinsMode();
 	bool ToggleCircuitState(uint8_t circuit, bool state);

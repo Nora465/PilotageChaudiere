@@ -15,6 +15,8 @@ extern AlarmID_t gMyAlarmID;
 extern bool gStates[2];
 extern bool gModeAuto;
 extern uint8_t gCurRange;
+extern bool gShowFullWeek[2];
+extern bool gSchedIsInEEPROM[NUM_OF_PERIODS];
 
 /**
  * Connect to the last wifi saved in WiFiManager (if there isn't, create an AP to connect)
@@ -95,7 +97,7 @@ void HandleForceState(AsyncWebServerRequest *request) { //URI : /ForceState?circ
 
 	if (!success) {
 		if (SHOW_DEBUG) Serial.println("[Web-ForcStat] Err : Couldn't change the state (already in this state ? physical button ?)");
-		request->send(400, "text/plain", "Erreur : le bouton \"mode\" est peut etre activé, ou le relai est déjà dans cette position");
+		request->send(400, "text/plain", "Erreur : le bouton physique est peut etre activé, ou le relai est déjà dans cette position");
 	} else {
 		//send states to WebClient
 		if (SHOW_DEBUG) Serial.println("[Web-ForcStat] OK : New State for CC" + String(circuitNumber) + " : " + ((gStates[circuitNumber - 1]) ? "Enabled" : "Disabled"));
@@ -139,13 +141,19 @@ void HandleSetMode(AsyncWebServerRequest *request) { //URI : /SetMode?mode=(0or1
 	}
 
 	//Check: Value of "mode" is different from the actual mode
-	if (gModeAuto == (modeValue)) {
+	if (gModeAuto == modeValue) {
 		if (SHOW_DEBUG) Serial.println("[Web-ChgMode] Err : The New Mode is the same as the actual one !");
 		return request->send(400, "text/plain", "Impossible de changer le mode : Le mode est le même que l'actuel !");
 	}
 
+	//Check : Schedule must exist (for this current range) if the new mode is "AUTO"
+	if (modeValue and !gSchedIsInEEPROM[gCurRange - 1]) {
+		if (SHOW_DEBUG) Serial.println("[Web-ChgMode] Err : Schedule doesn't exist, can go to \"AUTO\" mode !");
+		return request->send(400, "text/plain", "Impossible de passer en mode AUTO : Le planning n'a pas été configuré pour cette plage !");
+	}
+
 	//Store new mode in global variable
-	gModeAuto = (modeValue == 1);
+	gModeAuto = modeValue;
 	if (gModeAuto) 	CreateNewAlarm(); //if auto mode : create new alarm
 	else 			Alarm.free(gMyAlarmID); //if manu mode : Delete the alarm
 
@@ -191,6 +199,15 @@ void HandleSetRange(AsyncWebServerRequest *request) {
 	//Store new range in global variable
 	gCurRange = RangeValue;
 
+	//Check : the schedule of the new Range has been configured
+	if (gModeAuto and !gSchedIsInEEPROM[RangeValue - 1]) {
+		gModeAuto = false; //mode is manu, because of the unconfigured schedule
+		if (SHOW_DEBUG) Serial.println("[Web-ChgRange] Info : the schedule isn't configured for the new range (mode is now \"manu\")");
+		return request->send(200, "text/plain", "Le planning n'existe pas pour cette plage \nPassage en mode manu");
+		//TODO envoyer l'info au tel que le nouveau mode est MANU (intégrer un websocket ?)
+		//Actuellement, l'appli renvoit un getMode à chaque échéance de SetRange en HTTP400
+	}
+
 	if (SHOW_DEBUG) Serial.println("[Web-ChgRange] OK : Range is now : " + String((gCurRange==1)? "Work(1)": "Holiday(2)"));
 	request->send(200, "text/plain", "Plage Changée : " + String((gCurRange==1)? "Work(1)": "Holiday(2)"));
 
@@ -201,9 +218,9 @@ void HandleSetRange(AsyncWebServerRequest *request) {
 /**
  * ESP ==> AndroidApp : Send the Schedule for the requested Range to the web client
  * @param request *AsyncWebServerRequest - reference to the request of a client
- * @param showFullWeek bool[2] - Reference to how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  */
-void HandleGetSchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { //URI : /GetSchedule?range=(1 ou 2)
+void HandleGetSchedule(AsyncWebServerRequest *request) { //URI : /GetSchedule?range=(1 ou 2)
+
 	//first element of array indicate the fullweek (or not)
 	/*Representation of JSON document if FullWeek     : 
 	[
@@ -239,9 +256,9 @@ void HandleGetSchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { /
 	
 	//Adding data to the JSON string
 	//String jsonString = String(paramRange - 1) + ",";
-	String jsonString = String(!showFullWeek[paramRange - 1]) + ",";
+	String jsonString = String(!gShowFullWeek[paramRange - 1]) + ",";
 
-	if (showFullWeek[paramRange - 1]) {//FullWeek : we send all the schedule to the WebClient
+	if (gShowFullWeek[paramRange - 1]) {//FullWeek : we send all the schedule to the WebClient
 		for (uint8_t i=0; i < DAYS_PER_WEEK; i++) { 
 			//Adding schedule data to the JSON
 
@@ -281,9 +298,8 @@ void HandleGetSchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { /
 /**
  * AndroidApp ==> ESP : Change the schedule of the specified range
  * @param request *AsyncWebServerRequest - reference to the request of a client
- * @param showFullWeek bool[2] - Reference to how we display the schedule on phone (the 7 days of the week, or the work week and the weekend)
  */
-void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) { //URI : /ModifySchedule (data is POST)
+void HandleModifySchedule(AsyncWebServerRequest *request) { //URI : /ModifySchedule (data is POST)
 	/*Representation of JSON document if FullWeek     : 
 	[
 		Plage (1 ou 2)
@@ -312,7 +328,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 		return request->send(400, "text/plain", "Erreur : Aucune donnee dans le \"body\" (POST)!");
 	}
 
-	Serial.println(request->getParam("body", true)->value());
+	if (SHOW_DEBUG) Serial.println(request->getParam("body", true)->value());
 
 	//Parse JSON doc
 	const int capacity = 7*JSON_ARRAY_SIZE(4) + JSON_ARRAY_SIZE(9); //(7days * (2Period * 2startStop) + 9 array size (in total)
@@ -349,20 +365,25 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 		}
 	}*/
 
-	//save the method to display the schedule (doc[0] is the range)
-	showFullWeek[(int)doc[0] - 1] = ((int)doc[1] == 0); //doc[1] is FullWeek information from phone app
+	uint8_t schedRange = (uint8_t) doc[0] - 1; //Range for the current schedule
+
+	//save the method to display the schedule
+	gShowFullWeek[schedRange] = ((int)doc[1] == 0); //doc[1] is FullWeek information from phone app
+
+	//Save that a schedule had been configured for this range
+	gSchedIsInEEPROM[schedRange] = true;
 
 	//Put the new schedule in the structure
 	for (uint8_t i= 0; i < DAYS_PER_WEEK; i++) {
 		//Populating the schedule Structure
 		for (uint8_t j = 0; j < NUM_OF_PERIODS; j++) {
-			if (showFullWeek[(int)doc[0]-1]) { //show FullWeek
-				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Start = doc[2+i][2 *j];
-				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Stop  = doc[2+i][2 *j +1];
+			if (gShowFullWeek[schedRange]) { //show FullWeek
+				gSchedule[i].Ranges[schedRange].Periods[j].Start = doc[2+i][2 *j];
+				gSchedule[i].Ranges[schedRange].Periods[j].Stop  = doc[2+i][2 *j +1];
 			} else { //show Week+Weekend
 				//(i<5)?2:3 => 5 first days is the "week" and the last 2 are "weekend"
-				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Start = doc[(i<5) ?2 :3][2 *j];
-				gSchedule[i].Ranges[(int)doc[0]-1].Periods[j].Stop  = doc[(i<5) ?2 :3][2 *j +1];
+				gSchedule[i].Ranges[schedRange].Periods[j].Start = doc[(i<5) ?2 :3][2 *j];
+				gSchedule[i].Ranges[schedRange].Periods[j].Stop  = doc[(i<5) ?2 :3][2 *j +1];
 			}
 		}
 	}
@@ -381,7 +402,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request, bool showFullWeek[2]) 
 	//Write the schedule structure in the EEPROM
 	WriteScheduleToEEPROM(gSchedule);
 
-	CreateNewAlarm();
+	if (gModeAuto) CreateNewAlarm();
 
 	if (SHOW_DEBUG) Serial.println("[Web-GetNewSched] New Schedule for range " + String((int)doc[0]) + " has been writed !");
 	appendStrToFile("[ProgHoraire] Programmation Modifiee par " + request->client()->remoteIP().toString());

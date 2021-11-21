@@ -45,6 +45,7 @@ void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate) {
 	forceUpdate ? timeClient.forceUpdate() : timeClient.update();
 	
 	//True local time, depending on DST and time offset
+	//REVIEW tester le passage automatic entre heure hiver et été
 	time_t localTime = TZ_fr.toLocal(timeClient.getEpochTime());
 
 	//If the ESP time is not the local time => update the Time
@@ -55,7 +56,7 @@ void TryToUpdateTime(NTPClient &timeClient, bool forceUpdate) {
 
 /**
  * Return the current day of the week (1 is monday, and 7 is sunday)
- * Use weekday() (this return 1 for sunday, 2 is monday ... and 6 for sunday)
+ * Use weekday() (this return 1 for sunday, 2 is monday ... and 7 for sunday)
  * @return uint8_t - The current day of the week
  */
 uint8_t GetNormalWeekDay() {

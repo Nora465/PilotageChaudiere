@@ -7,6 +7,7 @@
 
 #include "MainHeader.h"		//Global Header File
 extern bool gShowFullWeek[2];
+extern bool gSchedIsInEEPROM[NUM_OF_PERIODS];
 
 /**
  * Write the schedule structure inside the EEPROM
@@ -29,9 +30,16 @@ bool LoadEEPROMSchedule(ScheduleDay schedule[7], bool displayValues) {
 		return false; //error
 	} else if (SHOW_DEBUG) Serial.println("[EEPROM] Data are valids ! ");
 
-	//how to display the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
-	gShowFullWeek[0] = (EEPROM.read(2) & 0b00000010) >> 1; // 0000 00XY => useFullWeek[0] = X  ... [1] = Y
-	gShowFullWeek[1] = (EEPROM.read(2) & 0b00000001);
+	//gSchedIsInEEPROM :The schedule is in the EEPROM (= The mode 'AUTO' can be enabled later)
+	//gShowFullWeek: how to display the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
+	
+	//0000 ABCD
+	//gSchedIsInEEPROM[0]= A .. [1]= B
+	//useFullWeek[0]= C .. [1] = D
+	gSchedIsInEEPROM[0] = (EEPROM.read(2) & 0b00001000)>> 3;
+	gSchedIsInEEPROM[1] = (EEPROM.read(2) & 0b00000100)>> 2;
+	gShowFullWeek[0]    = (EEPROM.read(2) & 0b00000010)>> 1;
+	gShowFullWeek[1]    = (EEPROM.read(2) & 0b00000001);
 
 	//Get the schedule (offset :3 because @0&1 are the magic number, and @2 is the type of schedule)
 	for (uint8_t i=0; i < DAYS_PER_WEEK; i++) {
@@ -72,7 +80,12 @@ void WriteScheduleToEEPROM(ScheduleDay schedule[7]) {
 	
 	EEPROM.write(0, EEPROM_MAGICNUMBER >> 8);
 	EEPROM.write(1, EEPROM_MAGICNUMBER & 0xFF);
-	EEPROM.write(2, (gShowFullWeek[0] << 1) | gShowFullWeek[1]); // 0000 00XY : useFullWeek[0]= X .. [1] = Y
+
+	//0000 ABCD
+	//gSchedIsInEEPROM[0]= A .. [1]= B
+	//useFullWeek[0]= C .. [1] = D
+	uint8_t valBools = (gSchedIsInEEPROM[0] << 3) | (gSchedIsInEEPROM[1] << 2) | (gShowFullWeek[0] << 1) | gShowFullWeek[1];
+	EEPROM.write(2, valBools);
 	
 	for (uint8_t i=0; i < DAYS_PER_WEEK; i++) {
 		EEPROM.put((sizeof(typeof(schedule[i])) *i) +3, schedule[i]);

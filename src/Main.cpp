@@ -27,6 +27,7 @@ bool gMemBPMANUAUTO = false; //memorize the previous state (for loop())
 uint8_t gCurRange= 1; //Current Range (Range2 - Heaters)
 AlarmID_t gMyAlarmID;
 bool gNextState= false; //Next state of the circuit 1 (defined by the schedule)
+bool gSchedIsInEEPROM[NUM_OF_PERIODS] = {false, false}; //The schedule has been configured by user (= "Auto" mode can be enabled)
 float gOutTemp = 0.0; //Outdoor temperature
 //---------------------------------------------------------------------------------------------------
 
@@ -78,13 +79,13 @@ void setup() {
 
 //--------- Schedule
 	server.on("/GetSchedule", [](AsyncWebServerRequest *request) {
-		HandleGetSchedule(request, gShowFullWeek);
+		HandleGetSchedule(request);
 	});
 
 	//TODO problem : https://github.com/me-no-dev/ESPAsyncWebServer/issues/902 and Issue#904 !
 	//HTTP_POST = 2 for MeNoDev (but it's 3 for the esp8266 lib ?)
 	server.on("/ModifySchedule", 2, [](AsyncWebServerRequest *request) {
-		HandleModifySchedule(request, gShowFullWeek);
+		HandleModifySchedule(request);
 	});
 
 	server.on("/deleteLog", [](AsyncWebServerRequest *request) {
