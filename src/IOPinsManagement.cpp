@@ -31,31 +31,39 @@ void SetPinsMode() {
 
 /** 
  * Change the state of a relay
- * @param circuit <uint8> the circuit you want to change (must be 1 or 2).
- * @param state   <bool> Wanted state of the circuit (must be 0 or 1)
- * @return <bool> True if success - False if fail
+ * @param circuit <uint8> the circuit you want to change (must be 1 or 2)
+ * @param state   <bool>  Wanted state of the circuit (must be 0 or 1)
+ * @return 		  <String> "" if success / "error name" if error
 */
-bool ToggleCircuitState(uint8_t circuit, bool state) {
+String ToggleCircuitState(uint8_t circuit, bool state) {
 	//TODO ajouter un argument à la fonction : reason (et archiver la raison du changement (Forcing, AUTO ...))
 	//pas obligé de rajouter un argument, on peut call FS.Archive("IO", <reasonOfChange>)
-	//TODO au lieu de return un <bool> (on connait pas l'erreur), on peut return "" si OK, ou "<raison de l'erreur>" 
-	//si erreur (en sortie de la fonction, on fera un if (ToggleCircuitState(1,0) == ""))
+
+	String returnStr = "";
 
 	if (circuit == 1) {
-		if (!digitalRead(BP1_AUTOMANU)) return false; //If (Physical) Manual Mode is enable, ignore the change
-		if (digitalRead(RELAY_CC1) == !state) return false; //don't change if the new state = old state
+		if (digitalRead(RELAY_CC1) == !state) returnStr = "new=old"; //new state = old state
 
 		digitalWrite(RELAY_CC1, !state); //inverted, because the relay contact is NC
 		digitalWrite(LED_CC1, state);
 	} else if (circuit == 2) {
-		if (digitalRead(RELAY_CC2) == !state) return false; //don't change if the new state = old state
+		if (digitalRead(RELAY_CC2) == !state) returnStr = "new=old"; //new state = old state
 		
 		digitalWrite(RELAY_CC2, !state); //inverted, because the relay contact is NC
 		digitalWrite(LED_CC2, state);
-	} else return false;
+	} else returnStr = "circuit is not 1 or 2";
 
 	gStates[circuit - 1] = state;
-	if (SHOW_DEBUG) Serial.println("[IO] OK - Changed state of circuit " + String(circuit) + ": " + (gStates[circuit] ? "activé" : "désactivé"));
-	//appendStrToFile("[IO] OK - Modification de l'etat du circuit " + String(circuit) + " => " + (gStates[circuit] ? "ACTIF(1)" : "DESACTIVE(0)"));
-	return true;
+	if (returnStr == "") {
+		//no error
+		if (SHOW_DEBUG) Serial.println("[IO-changeState] OK - circuit " + String(circuit) + ": " + (gStates[circuit-1] ? "activé" : "désactivé"));
+		appendStrToFile("[IO-changeState] OK - circuit " + String(circuit) + " => " + (gStates[circuit-1] ? "ACTIF(1)" : "DESACTIVE(0)"));
+	} else {
+		//error
+		//TODO supprimer les references au retour de cette fonction (on le fait déjà ici)
+		if (SHOW_DEBUG) Serial.println("[IO-changeState] error - circuit " + String(circuit) + " => erreur : " + String(returnStr));
+		appendStrToFile("[IO-changeState] error - circuit " + String(circuit) + " => erreur : " + String(returnStr));
+	}
+	
+	return returnStr;
 }

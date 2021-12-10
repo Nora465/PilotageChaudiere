@@ -6,28 +6,32 @@
 
 #include "MainHeader.h"
 
+//TODO revoir le log de tout les fichiers
+
 //------------- GLOBAL-DECLARATIONS --------------------------------------------------------------
 AsyncWebServer	server(50500);	// Instantiate an AsyncWebServer (listen to requests on port 50500)
 WiFiUDP 		ntpUDP; //The UDP instance for NTPClient
-NTPClient 		timeClient(ntpUDP, "europe.pool.ntp.org", TIME_OFFSET_S, TIME_UPDATE_INTERVAL);
+NTPClient 		timeClient(ntpUDP, "europe.pool.ntp.org", 0, TIME_UPDATE_INTERVAL);
 
 //TimeZone STD "Standard" and DST "DayLight Savings"
-TimeChangeRule frSTD = {"CET",  Last, Sun, Oct, 3, 60};  //CET  : UTC+1 (Winter)
-TimeChangeRule frDST = {"CEST", Last, Sun, Mar, 2, 120}; //CEST : UTC+2 (Summer)
+TimeChangeRule frSTD = {"CET",  Last, Sun, Oct, 3, 60};  //CET  : Starts the last Sunday of October at 3H00 => UTC+1 (Winter)
+TimeChangeRule frDST = {"CEST", Last, Sun, Mar, 2, 120}; //CEST : Starts the last sunday of March   at 2H00 => UTC+2 (Summer)
 Timezone TZ_fr(frDST, frSTD);
 
+//Schedule
 ScheduleDay gSchedule[7]; //index 0->6
-
 bool gShowFullWeek[2] = {true, true}; //how to display the schedule ON PHONE (the 7 days of the week, or the work week and the weekend)
-
-bool gStates[2] = {true, true}; //circuits states (NOT RELAYS) CC1: Boiler || CC2: Heaters
-bool gModeAuto = true; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified by androidApp or physically)
-//FIXME si on est en MANU (si pas de planning), qu'on envoit un planning, on passe en manu, mais l'appli n'affiche pas ce mode
-bool gMemBPMANUAUTO = false; //memorize the previous state (for loop())
-uint8_t gCurRange= 1; //Current Range (Range2 - Heaters)
-AlarmID_t gMyAlarmID;
 bool gNextState= false; //Next state of the circuit 1 (defined by the schedule)
+AlarmID_t gMyAlarmID;
 bool gSchedIsInEEPROM[NUM_OF_PERIODS] = {false, false}; //The schedule has been configured by user (= "Auto" mode can be enabled)
+
+//State of boiler and Buttons
+bool gModeAuto; //Mode of the circuit (true: Mode AUTOmatic // false: Mode MANUal) (can be modified only by androidApp)
+bool gBPModeManu; //Physical state of button1 "Mode Auto/Manu" (can be modified only by physical buttons)
+bool gMemBPMANUAUTO, gMemBPFORCEON_OFF; //memorize the previous state (for loop())
+uint8_t gCurRange= 1; //Current Range (Range2 - Heaters)
+bool gStates[2] = {true, true}; //circuits states (NOT RELAYS) CC1: Boiler || CC2: Heaters
+
 float gOutTemp = 0.0; //Outdoor temperature
 //---------------------------------------------------------------------------------------------------
 
@@ -101,58 +105,88 @@ void setup() {
 		request->send(404, "text/plain", "désolé, aucun fichier ne correspond à cette uri :'(");
 	});
 
+	server.on("/getTime", [] (AsyncWebServerRequest *request) {
+		request->send(200, "text/plain", String(day(now())) + "/" + String(month(now())) + "/" + String(year(now())) + " " + String(hour(now())) + "h" + String(minute(now())) + "m" + String(second(now())) + "s");
+	});
+
 	server.begin();
 	if (SHOW_DEBUG) Serial.println("[WebServer] Server HTTP DEMARRE !\n");
 //---------------------------------------------------------------------------------------------------
 
 	StartNTPClient(timeClient); //start the NTPClient and force update the Time (and NTPTime)
 
-	//Read Schedule from EEPROM
-	bool success = LoadEEPROMSchedule(gSchedule, true);
+	//Read Schedule from EEPROM and Auto/Manu button1 state
+	gModeAuto = LoadEEPROMSchedule(gSchedule, true);
+	gMemBPMANUAUTO = !gBPModeManu;
+	gBPModeManu = not digitalRead(BP1_AUTOMANU);
 
-	if (success) {
-		gModeAuto = true;
-		CreateNewAlarm(); //Create an alarm to change the state of circuit (when schedule say so)
-	} else {
-		//if error while loading the schedule from EEPROM, enable Manual mode, and activate both circuits
-		gModeAuto = false;
+	if (gBPModeManu) {
+		//button1 is "Manu" => get On/Off value of button2
+		ToggleCircuitState(1, digitalRead(BP2_FORCEON_OFF));
+		appendStrToFile("[Setup] Button1 is Manu => state of button2: " + String(digitalRead(BP2_FORCEON_OFF)?"ON":"OFF"));
+	} else if (gModeAuto) {
+		//schedule exists and button1 is "auto" => enable automatic alarm
+		CreateNewAlarm();
+		appendStrToFile("[Setup] Button1 is Auto => Schedule exists => mode AUTO");
+	} else if (not gModeAuto) {
+		//Schedule error and button1 is "auto" => enable Manual mode, and activate both circuits
 		ToggleCircuitState(1, true);
-		ToggleCircuitState(2, true);
-		appendStrToFile("[ProgHoraire] Aucun programme enregistré, passage en mode MANUel !");
+		//appendStrToFile("[ProgHoraire] Aucun programme enregistré, passage en mode MANUel !");
+		appendStrToFile("[Setup] Button1 is Auto => Schedule doesn't exists => mode Manu");
 	}
-	if (SHOW_DEBUG) Serial.println("Alarm ID : " + String(gMyAlarmID));
-
+	ToggleCircuitState(2, true); //TODO gérer le stockage de l'état du CC2 à chaque modifications
 	
-	appendStrToFile("==========================");
+	if (SHOW_DEBUG) Serial.println("[Setup] BP AutoManu is : " + String(gBPModeManu?"Manu":"Auto"));
+	appendStrToFile("[Setup] BP AutoManu is : " + String(gBPModeManu?"Manu":"Auto"));
+
+	appendStrToFile("===========end setup===========");
+
 }
 
 void loop() {
 	//Update the Time if the "update Interval" (inside NTPClient) has been reached (every day)
 	TryToUpdateTime(timeClient);
 
-	//if Mode AUTOMATIC enabled (1 is auto, 0 is manu)
-	bool posModeAuto = !digitalRead(BP1_AUTOMANU);
-	
-	if (posModeAuto && !gMemBPMANUAUTO) {
-		gMemBPMANUAUTO = true;
+	//Check : State of button1 BP1_AUTOMANU
+	int8_t resultBP = testBP(BP1_AUTOMANU, false, &gMemBPMANUAUTO); //1 is auto, 0 is manu
+	if (resultBP == 1) { //Raising Edge (Auto)
+		gBPModeManu = false;
+		gMemBPFORCEON_OFF = !digitalRead(BP2_FORCEON_OFF); //reset the memory to update the state of circuit 1
+		//TODO check if real autoMode is enabled : if so, start new alarm, if not, don't do anything
+		
 		CreateNewAlarm(); //Enable Alarm
-		if (SHOW_DEBUG) Serial.println("[IO] dab auto");
-		appendStrToFile("[IO] Physical Button \"AUTO/MANU\" has been toggle! Now : AUTOMATIC");
-	}
-	if (!posModeAuto && gMemBPMANUAUTO) { //if Mode MANUAL
-		gMemBPMANUAUTO= false;
+		if (SHOW_DEBUG) Serial.println("[IO] Bouton Physique \"AUTO/MANU\" a changé ! Etat : AUTOMATIQUE");
+		appendStrToFile("[IO] Physical Button1 \"AUTO/MANU\" has been toggle! Now : AUTOMATIC");
+	} else if (resultBP == 0) { //Falling Edge (Manu)
+		gBPModeManu = true;
+		gMemBPFORCEON_OFF = !digitalRead(BP2_FORCEON_OFF); //reset the memory to update the state of circuit 1
+		
 		Alarm.free(gMyAlarmID); //disable Alarm
-		if (SHOW_DEBUG) Serial.println("[IO] dab manu");
-		appendStrToFile("[IO] Physical Button \"AUTO/MANU\" has been toggle! Now : MANUAL");
+		if (SHOW_DEBUG) Serial.println("[IO] Bouton Physique \"AUTO/MANU\" a changé ! Etat : MANUEL");
+		appendStrToFile("[IO] Physical Button1 \"AUTO/MANU\" has been toggle! Now : MANUAL");
 	}
-	
+
+	//If button1 is "Manu"
+	if (gBPModeManu) {
+		//Check : State of button2 BP2_FORCEON_OFF
+		resultBP = testBP(BP2_FORCEON_OFF, false, &gMemBPFORCEON_OFF); //0 is OFF, 1 is ON
+		if (resultBP == 1) { //Raising Edge (Force ON)
+			String test = ToggleCircuitState(1, true);
+			appendStrToFile("DABDAB ON: " + test);
+			if (SHOW_DEBUG) Serial.println("[IO] Physical Button2 \"Force\" is now : ON");
+			appendStrToFile("[IO] Physical Button2 \"FORCE STATE\" has been toggle! Now : FORCE ON");
+		} else if (resultBP == 0) { //Falling Edge (Force OFF)
+			String test = ToggleCircuitState(1, false);
+			appendStrToFile("DABDAB OFF : " + test);
+			if (SHOW_DEBUG) Serial.println("[IO] Physical Button2 \"Force\" is now : OFF");
+			appendStrToFile("[IO] Physical Button2 \"FORCE STATE\" has been toggle! Now : FORCE OFF");
+		}
+	}
+
 	//In AUTO Mode, check if an alarm has reached the threshold, and execute the Handle
 	if (gModeAuto) Alarm.delay(1000);
+	else delay(1000);
 
-	//display of time (NTP)
-	//if (SHOW_DEBUG) Serial.println(timeClient.getFormattedTime()); //the NTPTime
-	//Serial.println(String(hour()) + ":"+String(minute()) + ":" + String(second()));
-	
 	/* //display of temperature
 	//Temperature acquisition (LM61 sensor)
 	float voltage = analogRead(A0) * (3.3/1023.0);
@@ -160,4 +194,30 @@ void loop() {
 	if (SHOW_DEBUG) Serial.println("Temperature : " + String(temp));
 	delay(5000);
 	*/
+}
+
+/**
+ * @brief test for raising/falling edge for a pin of the ESP8266
+ * 
+ * @param BPPin pin to test
+ * @param invertInput read the opposite of the pin
+ * @param MemBP a global boolean to store the previous state of button
+
+ * @return -1 if no change  
+ * @return 0 for a falling edge
+ * @return 1 for a raising edge
+ */
+int8_t testBP(uint8_t BPPin, bool invertInput, bool *memBP) {
+
+	//Inversion of input if needed
+	bool BPpos = digitalRead(BPPin) xor invertInput;
+
+	if (BPpos and not *memBP) {
+		*memBP = true;
+		return 1;
+	} else if (not BPpos and *memBP) {
+		*memBP = false;
+		return 0;
+	}
+	return -1;
 }

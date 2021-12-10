@@ -37,6 +37,6 @@
 
 	//random number stored in @0-1 of EEPROM
 	//Checks if the schedule has been write (at least) one time by this specific program
-	const uint16_t EEPROM_MAGICNUMBER = 35187;
+	const uint16_t EEPROM_MAGICNUMBER = 35087;
 
 #endif

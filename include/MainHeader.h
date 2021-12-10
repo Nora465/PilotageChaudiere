@@ -37,16 +37,15 @@
 	//DON'T USE D0 : Dead IO ? Internal malfunctioning ?
 	#define USB_D_PLUS D1 //SCL (I2C) (fil blanc)
 	#define USB_D_MINUS D2 //SDA (I2C) (fil vert)
-	#define BP1_AUTOMANU D3
-	#define BP2_FORCEON_OFF D4
+	#define RELAY_CC1 D3
+	#define RELAY_CC2 D4
+	#define BP1_AUTOMANU D5
+	#define BP2_FORCEON_OFF D6
 	#define LED_CC1 D7 //Circuit "Radiateurs"
 	#define LED_CC2 D8 //Circuit "Plancher Chauffant"
-	#define RELAY_CC1 D5
-	#define RELAY_CC2 D6
 
 	#define NUM_OF_PERIODS 2
 	
-	#define TIME_OFFSET_S 3600 + 3600 //France : UTC+1 (3600 seconds = 1H) + 1H (heure d'été)
 	#define TIME_UPDATE_INTERVAL 1 * 24 * 60 * 60 * 1000 //1 Day
 
 	#define SHOW_DEBUG true //Show the Serial.println() in the console (Useless when in production)
@@ -64,7 +63,7 @@
 	void HandleModifySchedule(AsyncWebServerRequest *request);
 	//IOPinsManagement.cpp
 	void SetPinsMode();
-	bool ToggleCircuitState(uint8_t circuit, bool state);
+	String ToggleCircuitState(uint8_t circuit, bool state);
 	
 	//FSManagement.cpp
 	void appendStrToFile(String str);
@@ -89,5 +88,6 @@
 	//TEMP/TEST Handle/functions
 	void startLittleFS();
 	
-
+	//Main.cpp
+	int8_t testBP(uint8_t BPPin, bool invertInput, bool *memBP);
 #endif
