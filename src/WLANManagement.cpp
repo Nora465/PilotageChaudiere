@@ -400,7 +400,7 @@ void HandleModifySchedule(AsyncWebServerRequest *request) { //URI : /ModifySched
 	}
 
 	//Write the schedule structure in the EEPROM
-	//WriteScheduleToEEPROM(gSchedule);
+	WriteScheduleToEEPROM(gSchedule);
 
 	if (gModeAuto) CreateNewAlarm();
 
